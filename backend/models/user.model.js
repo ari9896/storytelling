@@ -7,10 +7,22 @@ const profilePhotoSchema = new mongoose.Schema({
   deletedAt: { type: Date, default: null },
 })
 
+const restrictionSchema = new mongoose.Schema({
+  status: { type: String, enum: ['none', 'temporary', 'indefinite'], default: 'none' },
+  reason: { type: String, default: '', maxlength: 500 },
+  expiresAt: { type: Date, default: null },
+  setBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  setAt: { type: Date, default: null },
+}, { _id: false })
+
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, minlength: 3, maxlength: 20, match: /^[a-zA-Z0-9]+$/ },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true, select: false },
+  commentRestriction: { type: restrictionSchema, default: () => ({ status: 'none' }) },
+  commentRestrictionHistory: { type: [restrictionSchema], default: [], select: false },
+  signupNoticeAt: { type: Date, default: null, select: false, index: true },
+  usersPageSeenAt: { type: Date, default: null, select: false },
   signupIp: { type: String, default: null, select: false },
   role: { type: String, enum: ['reader', 'admin'], default: 'reader' },
   profilePic: { type: String, default: null },

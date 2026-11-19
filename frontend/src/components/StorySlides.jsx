@@ -1,14 +1,16 @@
+import ChapterText from './ChapterText.jsx'
 import MoreComingPrompt from './MoreComingPrompt.jsx'
 import ChapterGallery from './ChapterGallery.jsx'
 import { useAuth } from '../context/auth.js'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { FiArrowLeft, FiArrowRight, FiBookOpen, FiList, FiMaximize2, FiMinimize2, FiX } from 'react-icons/fi'
 
-const StorySlides = ({ story, onSlideChange, canOpenSlide, initialIndex = 0, following = false }) => {
+const StorySlides = ({ story, onSlideChange, canOpenSlide, initialIndex = 0, following = false, onParagraphChange, resumeParagraphIndex = null }) => {
   const { user, loading, requireAccount } = useAuth()
   const firstChapterIndex = story.slides.findIndex(item => item.type === 'story')
   const [selectedIndex, setSlideIndex] = useState(initialIndex)
   const slideIndex = !user && selectedIndex > firstChapterIndex ? firstChapterIndex : selectedIndex
+  const [initialBookmark] = useState(() => ({ chapterId: story.slides[initialIndex]?.chapterId, paragraphIndex: resumeParagraphIndex }))
   const [showMoreComing, setShowMoreComing] = useState(false)
   const [imageExplanation, setImageExplanation] = useState(null)
   const [readingView, setReadingView] = useState(false)
@@ -147,11 +149,12 @@ const StorySlides = ({ story, onSlideChange, canOpenSlide, initialIndex = 0, fol
               className={readingView ? '' : 'min-h-0 flex-1 md:overflow-y-auto md:pr-3'}>
               {imageExplanation && !readingView ? <div>
                 <p className="whitespace-pre-wrap break-words text-lg leading-8 text-slate-700 dark:text-slate-200">{imageExplanation.text}</p>
-              </div> : <>
+              </div> : null}
+              <div hidden={!!imageExplanation && !readingView}>
               <h2 ref={titleRef} className="mt-3 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{slide.title}</h2>
               {slide.draft && <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Sample passage · replace with your own telling</p>}
-              <p className="mt-6 whitespace-pre-line text-lg leading-8 text-slate-700 dark:text-slate-200">{slide.text}</p>
-              </>}
+              <ChapterText key={slide.chapterId} text={slide.text} chapterId={slide.chapterId} scrollRef={textRef} readerRef={sectionRef} suspended={!!imageExplanation || isRevealing || showChapterList} onParagraphChange={onParagraphChange} resumeParagraphIndex={initialBookmark.chapterId === slide.chapterId ? initialBookmark.paragraphIndex : null} />
+              </div>
             </div>
           </div>
         </article>

@@ -1,3 +1,5 @@
+import User from '../models/user.model.js'
+import { effectiveCommentRestriction, restrictionMessage } from '../lib/commentRestriction.js'
 import { commentQualityMessage } from '../lib/commentQuality.js'
 import { notifyReply } from '../lib/replyNotification.js'
 import Comment from '../models/comment.model.js'
@@ -11,7 +13,7 @@ export const DELETED_COMMENT_MESSAGE = 'This comment has been deleted by an admi
 export const commentTree = comments => {
   const nodes = new Map(comments.map(comment => [String(comment._id), {
     id: String(comment._id), authorId: String(comment.author?._id || comment.author), author: comment.author?.username || comment.authorName,
-    profilePic: comment.profilePic, deleted: !!comment.deletedAt, hidden: !!comment.deletedAt && comment.deletionMode === 'hidden', body: comment.deletedAt ? DELETED_COMMENT_MESSAGE : comment.body, createdAt: comment.createdAt, replies: [],
+    profilePic: comment.author?.profilePic || null, deleted: !!comment.deletedAt, hidden: !!comment.deletedAt && comment.deletionMode === 'hidden', body: comment.deletedAt ? DELETED_COMMENT_MESSAGE : comment.body, createdAt: comment.createdAt, replies: [],
   }]))
   const roots = []
   for (const comment of comments) {
@@ -31,8 +33,8 @@ export const getDiscussion = async (req, res) => {
     if (!story) return res.status(404).json({ error: 'Story not found.' })
     await ensureCommentMigration(story)
     const readableIds = story.chapters.filter((_chapter, index) => canReadChapter(story, index, req.user)).map(chapter => chapter._id)
-    const comments = await Comment.find({ storyId: story._id, chapterId: { $in: readableIds } }).sort({ createdAt: 1, _id: 1 }).populate('author', 'username').lean()
-    return res.json({ userId: req.user ? String(req.user._id) : null, chapters: story.chapters.map((chapter, index) => ({
+    const comments = await Comment.find({ storyId: story._id, chapterId: { $in: readableIds } }).sort({ createdAt: 1, _id: 1 }).populate('author', 'username profilePic').lean()
+    return res.json({ commentRestriction: effectiveCommentRestriction(req.user), userId: req.user ? String(req.user._id) : null, chapters: story.chapters.map((chapter, index) => ({
       id: String(chapter._id), number: chapter.number,
       hasCommented: !!req.user && chapter.commentedUserIds.some(id => String(id) === String(req.user._id)),
       comments: (req.user ? canReadChapter(story, index, req.user) : index === 0) ? commentTree(comments.filter(comment => String(comment.chapterId) === String(chapter._id))) : [],
@@ -41,6 +43,8 @@ export const getDiscussion = async (req, res) => {
 }
 
 export const postComment = async (req, res) => {
+  const restriction = effectiveCommentRestriction(req.user)
+  if (restriction.status !== 'none') return res.status(403).json({ code: 'COMMENT_RESTRICTED', commentRestriction: restriction, error: restrictionMessage(restriction) })
   const { body, parentId } = req.body || {}
   if (typeof body !== 'string' || !body.trim() || body.length > 1000) return res.status(400).json({ error: 'Enter a comment of 1–1000 characters.' })
   const qualityMessage = commentQualityMessage(body)
@@ -56,6 +60,10 @@ export const postComment = async (req, res) => {
     let savedChapter
     let savedComments
     await mongoose.connection.transaction(async session => {
+      const currentUser = await User.findById(req.user._id).select('commentRestriction').session(session)
+      if (!currentUser) fail(401, 'Account no longer exists.')
+      const currentRestriction = effectiveCommentRestriction(currentUser)
+      if (currentRestriction.status !== 'none') fail(403, restrictionMessage(currentRestriction))
       story = await Story.findOne({ slug: req.params.slug, deletedAt: null }).session(session)
       if (!story) fail(404, 'Story not found.')
       const currentIndex = story.chapters.findIndex(chapter => String(chapter._id) === req.params.chapterId)
@@ -79,7 +87,7 @@ export const postComment = async (req, res) => {
       }, { session })
       if (result.matchedCount !== 1) fail(404, 'Story or chapter no longer exists.')
       savedChapter = { id: chapter._id, number: chapter.number }
-      savedComments = await Comment.find({ storyId: story._id, chapterId: chapter._id }).sort({ createdAt: 1, _id: 1 }).session(session).populate('author', 'username').lean()
+      savedComments = await Comment.find({ storyId: story._id, chapterId: chapter._id }).sort({ createdAt: 1, _id: 1 }).session(session).populate('author', 'username profilePic').lean()
     })
     return res.status(201).json({ chapterId: String(savedChapter.id), number: savedChapter.number, hasCommented: true, comments: commentTree(savedComments) })
   } catch (error) { return res.status(error.status || 500).json({ error: error.status ? error.message : 'Your comment could not be saved. Please try again.' }) }

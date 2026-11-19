@@ -8,6 +8,7 @@ import { retiredStorySlugs } from '../lib/retiredStories.js'
 import { randomUUID } from 'node:crypto'
 import Story from '../models/story.model.js'
 import cloudinary from '../lib/cloudinary.js'
+import { checkStoryImagesForGore, ImageModerationError } from '../lib/imageModeration.js'
 
 const validText = (value, max) => typeof value === 'string' && value.trim().length > 0 && value.length <= max
 export const validateStoryInput = (body, allowExistingImages = false) => {
@@ -65,6 +66,7 @@ export const createStory = async (req, res) => {
   const uploaded = []
   let saved = false
   try {
+    await checkStoryImagesForGore(req.body)
     const slug = 'story-' + randomUUID()
     const thumbnail = req.body.thumbnail ? await uploadThumbnail(req.body.thumbnail, slug, uploaded) : null
     const chapters = []
@@ -88,8 +90,9 @@ export const createStory = async (req, res) => {
     })
     saved = true
     return res.status(201).json(readerStory(story, req.user))
-  } catch {
+  } catch (error) {
     if (!saved) await Promise.allSettled(uploaded.map(id => cloudinary.uploader.destroy(id)))
+    if (error instanceof ImageModerationError) return res.status(error.status).json({ error: error.message, code: error.code })
     return res.status(500).json({ error: 'Unable to save your story. Your editor has been kept; please try again.' })
   }
 }
@@ -107,7 +110,7 @@ export const getStory = async (req, res) => {
     const story = await loadStory(req.params.slug)
     if (!story) return res.status(404).json({ error: 'Story not found.' })
     const progress = req.user ? await ReadingProgress.findOne({ userId: req.user._id, storyId: story._id }).lean() : null
-    return res.json({ ...readerStory(story, req.user), resumeChapterId: resumeChapterId(story, req.user, progress) })
+    return res.json({ ...readerStory(story, req.user), resumeChapterId: resumeChapterId(story, req.user, progress), resumeParagraphIndex: resumeChapterId(story, req.user, progress) && Number.isInteger(progress?.paragraphIndex) ? progress.paragraphIndex : null })
   } catch { return res.status(500).json({ error: 'Unable to load this story.' }) }
 }
 
@@ -154,6 +157,7 @@ export const updateStory = async (req, res) => {
   const uploaded = []
   let committed = false
   try {
+    await checkStoryImagesForGore(req.body)
     const thumbnail = req.body.thumbnail === undefined ? story.thumbnail : req.body.thumbnail === null ? null : req.body.thumbnail.data ? await uploadThumbnail(req.body.thumbnail, story.slug, uploaded) : story.thumbnail
     const chapters = []
     for (const [index, chapter] of req.body.chapters.entries()) {
@@ -202,8 +206,9 @@ export const updateStory = async (req, res) => {
     }
     committed = true
     return res.json(readerStory(updated, req.user))
-  } catch {
+  } catch (error) {
     if (!committed) await Promise.allSettled(uploaded.map(id => cloudinary.uploader.destroy(id)))
+    if (error instanceof ImageModerationError) return res.status(error.status).json({ error: error.message, code: error.code })
     return res.status(500).json({ error: 'Unable to save changes. Your editor has been kept; please try again.' })
   }
 }

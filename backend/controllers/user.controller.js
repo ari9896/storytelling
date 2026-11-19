@@ -1,3 +1,5 @@
+import { effectiveCommentRestriction } from '../lib/commentRestriction.js'
+import mongoose from 'mongoose'
 import { signupIp } from '../lib/signupIp.js'
 import User from '../models/user.model.js'
 import validator from 'validator'
@@ -12,6 +14,7 @@ const publicUser = (user) => ({
   profilePic: user.profilePic,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
+  commentRestriction: effectiveCommentRestriction(user),
 })
 
 export const signup = async (req, res) => {
@@ -39,7 +42,7 @@ export const signup = async (req, res) => {
     const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { username }] })
     if (existingUser) return res.status(400).json({ error: 'Email or username already in use.' })
     const hash = await bcrypt.hash(password, 10)
-    const user = await User.create({ username, email: normalizedEmail, password: hash, signupIp: signupIp(req) })
+    const user = await User.create({ username, email: normalizedEmail, password: hash, signupIp: signupIp(req), signupNoticeAt: new Date() })
     return res.status(201).json(publicUser(user))
   } catch (error) {
     if (error.code === 11000) return res.status(400).json({ error: 'Email or username already in use.' })
@@ -96,4 +99,14 @@ export const updateUsername = async (req, res) => {
     if (error.code === 11000) return res.status(409).json({ error: 'That username is already in use.' })
     return res.status(500).json({ error: 'Unable to change username. Please try again.' })
   }
+}
+
+export const getPublicProfile = async (req, res) => {
+  res.set('Cache-Control', 'private, no-store')
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid user ID.' })
+  try {
+    const user = await User.findById(req.params.id).select('_id username profilePic createdAt').lean()
+    if (!user) return res.status(404).json({ error: 'This profile is no longer available.' })
+    return res.json({ id: String(user._id), username: user.username, profilePic: user.profilePic || null, createdAt: user.createdAt })
+  } catch { return res.status(500).json({ error: 'Unable to load this profile.' }) }
 }

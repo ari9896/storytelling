@@ -1,3 +1,4 @@
+import UserCard from '../components/UserCard.jsx'
 import EmojiPicker from '../components/EmojiPicker.jsx'
 import { saveReadingPosition } from '../lib/readingProgress.js'
 import CommentCharacterCount from '../components/CommentCharacterCount.jsx'
@@ -6,12 +7,13 @@ import { api, authError } from '../lib/api.js'
 import ChapterCommentPrompt from '../components/ChapterCommentPrompt.jsx'
 import { firstMissingComment } from '../lib/chapterAccess.js'
 import { useAuth } from '../context/auth.js'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import StorySlides from '../components/StorySlides.jsx'
 
 const StorytellingSandbox = ({ story, onProgressSaved }) => {
   const { user, loading, requireAccount } = useAuth()
+  const [selectedProfile, setSelectedProfile] = useState(null)
   const navigate = useNavigate()
   const location = useLocation()
   const requestedChapter = new URLSearchParams(location.search).get('chapter') || story.resumeChapterId
@@ -50,6 +52,16 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
     })
     return () => cancelAnimationFrame(frame)
   }, [ready, discussion, location.hash])
+  const [restrictionNow, setRestrictionNow] = useState(() => Date.now())
+  const commentRestriction = ready ? discussion.commentRestriction : user?.commentRestriction
+  const commentingRestricted = commentRestriction?.status === 'indefinite' || (commentRestriction?.status === 'temporary' && new Date(commentRestriction.expiresAt).getTime() > restrictionNow)
+  useEffect(() => {
+    if (!ready || discussion.commentRestriction?.status !== 'temporary') return undefined
+    const remaining = new Date(discussion.commentRestriction.expiresAt).getTime() - Date.now()
+    if (remaining <= 0) return undefined
+    const timer = setTimeout(() => setRestrictionNow(Date.now()), Math.min(2147483647, remaining))
+    return () => clearTimeout(timer)
+  }, [ready, discussion, restrictionNow])
   const [commentBody, setCommentBody] = useState('')
   const [replyingTo, setReplyingTo] = useState(null)
   const [replyBody, setReplyBody] = useState('')
@@ -59,15 +71,12 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
   const activeChapter = activeSlide.type === 'story' ? activeSlide.chapter : null
   const comments = activeChapter === null ? [] : commentsByChapter[activeChapter] || []
 
-  const viewedChapterId = activeSlide.type === 'story' && !activeSlide.locked ? activeSlide.chapterId : null
-  useEffect(() => {
-    if (!accountId || !viewedChapterId || loading) return undefined
-    let active = true
-    saveReadingPosition(accountId, story.id, viewedChapterId)
-      .then(() => { if (active) setPositionError('') })
-      .catch(() => { if (active) setPositionError('Your reading position could not be saved. It will retry when you change chapters.') })
-    return () => { active = false }
-  }, [accountId, story.id, viewedChapterId, loading])
+  const handleParagraphChange = useCallback((chapterId, paragraphIndex) => {
+    if (!accountId) return
+    saveReadingPosition(accountId, story.id, chapterId, paragraphIndex)
+      .then(() => setPositionError(''))
+      .catch(() => setPositionError('Your reading position could not be saved. It will retry as you read.'))
+  }, [accountId, story.id])
 
   const handleSlideChange = (nextIndex) => {
     setActiveSlideIndex(nextIndex)
@@ -92,7 +101,10 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
       try { await onProgressSaved?.() } catch { setPostError('Comment saved, but the next chapter could not be loaded. Refresh to try again.') }
       return true
     } catch (failure) {
-      if (failure.response?.data?.code === 'COMMENT_NEEDS_DETAIL') {
+      if (failure.response?.data?.code === 'COMMENT_RESTRICTED') {
+        setDiscussion(current => current ? { ...current, commentRestriction: failure.response.data.commentRestriction } : current)
+        setPostError(authError(failure))
+      } else if (failure.response?.data?.code === 'COMMENT_NEEDS_DETAIL') {
         setDetailHint({ target: parentId || 'comment', message: authError(failure) })
         requestAnimationFrame(() => document.getElementById(parentId ? `reply-${parentId}` : 'story-comment')?.focus({ preventScroll: true }))
       } else setPostError(authError(failure))
@@ -163,6 +175,7 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
+          <button type="button" disabled={!comment.authorId || comment.authorId === 'null'} onClick={() => setSelectedProfile(comment.authorId)} aria-label={`View ${comment.author}'s profile`} className="shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
           {comment.profilePic ? (
             <img src={comment.profilePic} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
           ) : (
@@ -170,8 +183,9 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
               {comment.author.charAt(0).toUpperCase()}
             </span>
           )}
+          </button>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h3 className="truncate font-semibold text-slate-900 dark:text-slate-100">{comment.author}</h3>
+            <h3 className="min-w-0 truncate font-semibold text-slate-900 dark:text-slate-100"><button type="button" disabled={!comment.authorId || comment.authorId === 'null'} onClick={() => setSelectedProfile(comment.authorId)} className="hover:underline focus-visible:outline-2 focus-visible:outline-blue-600">{comment.author}</button></h3>
             {story.creatorId && comment.authorId === story.creatorId && <span className="shrink-0 rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">Author</span>}
           </div>
         </div>
@@ -205,11 +219,11 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
             rows={2}
             className="mt-2 w-full resize-y rounded-xl border border-slate-300 dark:border-slate-600 p-3 text-slate-900 dark:text-slate-100 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
-          <EmojiPicker textareaId={`reply-${comment.id}`} value={replyBody} onChange={text => { setReplyBody(text); if (detailHint?.target === comment.id) setDetailHint(null) }} disabled={loading || posting} />
+          <EmojiPicker textareaId={`reply-${comment.id}`} value={replyBody} onChange={text => { setReplyBody(text); if (detailHint?.target === comment.id) setDetailHint(null) }} disabled={loading || posting || commentingRestricted} />
           <CommentCharacterCount id={`reply-count-${comment.id}`} value={replyBody} />
           {detailHint?.target === comment.id && <CommentDetailHint id={`reply-detail-${comment.id}`} message={detailHint.message} />}
           <div className="mt-2 flex gap-3">
-            <button type="submit" disabled={loading || posting || (!!user && (!ready || !replyBody.trim()))} className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700">
+            <button type="submit" disabled={loading || posting || commentingRestricted || (!!user && (!ready || !replyBody.trim()))} className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700">
               Post reply
             </button>
             <button type="button" onClick={() => { setReplyingTo(null); setReplyBody(''); setDetailHint(null) }} className="text-sm font-semibold text-slate-600 dark:text-slate-300 hover:underline">
@@ -237,7 +251,7 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
     {deleteError && <p role="alert" className="mb-5 rounded-xl bg-red-50 dark:bg-red-950 p-4 text-sm text-red-700 dark:text-red-300">{deleteError}</p>}
     <h1 className="mb-6 text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{story.title}</h1>
     {positionError && <p role="status" className="mb-4 text-sm text-slate-500 dark:text-slate-400">{positionError}</p>}
-    <StorySlides following={ready && discussion.chapters.some(chapter => chapter.hasCommented)} initialIndex={initialSlideIndex} story={story} onSlideChange={handleSlideChange} canOpenSlide={canOpenSlide} />
+    <StorySlides onParagraphChange={handleParagraphChange} resumeParagraphIndex={!location.search && !location.hash ? story.resumeParagraphIndex : null} following={ready && discussion.chapters.some(chapter => chapter.hasCommented)} initialIndex={initialSlideIndex} story={story} onSlideChange={handleSlideChange} canOpenSlide={canOpenSlide} />
     {requiredChapter !== null && <ChapterCommentPrompt chapter={requiredChapter} onClose={() => setRequiredChapter(null)} />}
 
     {activeChapter !== null && <section id="discussion" className="mt-8 scroll-mt-32 rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-lg md:p-8">
@@ -251,6 +265,11 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
       {discussionError && <p role="alert" className="mt-4 text-sm text-red-700 dark:text-red-300">{discussionError} Refresh to try again.</p>}
       {postError && <p role="alert" className="mt-4 text-sm text-red-700 dark:text-red-300">{postError}</p>}
       {posting && <p role="status" className="mt-4 text-sm text-blue-700 dark:text-blue-300">Saving your comment…</p>}
+      {commentingRestricted && <div role="status" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+        <p className="font-semibold">Commenting and replying are restricted for your account.</p>
+        <p className="mt-2">{commentRestriction.status === 'temporary' ? `Access returns on ${new Date(commentRestriction.expiresAt).toLocaleString()}.` : 'An admin must restore your commenting access.'} Reason: {commentRestriction.reason}</p>
+        <p className="mt-2">Your posts and reading progress are preserved. Further chapters still require comments to unlock.</p>
+      </div>}
       <form onSubmit={addComment} className="mt-6">
         <label htmlFor="story-comment" className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
           Add a comment
@@ -265,12 +284,12 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
           placeholder="What did you think of this chapter? Share a thought, ask a question, or tell us what you think might happen next."
           className="mt-2 w-full scroll-mt-32 resize-y rounded-xl border border-slate-300 dark:border-slate-600 p-3 text-slate-900 dark:text-slate-100 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
         />
-        <EmojiPicker textareaId="story-comment" value={commentBody} onChange={text => { setCommentBody(text); if (detailHint?.target === 'comment') setDetailHint(null) }} disabled={loading || posting} />
+        <EmojiPicker textareaId="story-comment" value={commentBody} onChange={text => { setCommentBody(text); if (detailHint?.target === 'comment') setDetailHint(null) }} disabled={loading || posting || commentingRestricted} />
         <CommentCharacterCount id="comment-character-count" value={commentBody} />
         {detailHint?.target === 'comment' && <CommentDetailHint id="comment-detail-hint" message={detailHint.message} />}
         <button
           type="submit"
-          disabled={loading || posting || (!!user && (!ready || !commentBody.trim()))}
+          disabled={loading || posting || commentingRestricted || (!!user && (!ready || !commentBody.trim()))}
           className="mt-3 rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
         >
           Post comment
@@ -283,6 +302,7 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
         ) : comments.map((comment) => renderComment(comment))}
       </div>
     </section>}
+    {selectedProfile && <UserCard key={selectedProfile} id={selectedProfile} onClose={() => setSelectedProfile(null)} />}
   </main>
   )
 }

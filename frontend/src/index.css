@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+@keyframes story-reveal {
+  0% { opacity: 0; }
+  35%, 50% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.story-reveal-overlay {
+  animation: story-reveal 3s ease-in-out forwards;
+}
+
+.more-coming-prompt::backdrop,
+.signup-prompt::backdrop,
+.chapter-comment-prompt::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.photo-viewer::backdrop {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+html.dark {
+  background: #020617;
+  color-scheme: dark;
+}
+html.dark body {
+  background: #020617;
+  color: #e2e8f0;
+}
+html.dark :is(input, textarea) {
+  color-scheme: dark;
+}
+html.dark .more-coming-prompt::backdrop,
+html.dark .signup-prompt::backdrop,
+html.dark .chapter-comment-prompt::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.user-details-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.feedback-detail-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }

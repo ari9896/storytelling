@@ -170,7 +170,10 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
               {comment.author.charAt(0).toUpperCase()}
             </span>
           )}
-          <h3 className="truncate font-semibold text-slate-900 dark:text-slate-100">{comment.author}</h3>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h3 className="truncate font-semibold text-slate-900 dark:text-slate-100">{comment.author}</h3>
+            {story.creatorId && comment.authorId === story.creatorId && <span className="shrink-0 rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">Author</span>}
+          </div>
         </div>
         <time dateTime={comment.createdAt} className="ml-auto shrink-0 text-right text-xs text-slate-500 dark:text-slate-400">
           {new Date(comment.createdAt).toLocaleString()}

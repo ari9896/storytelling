@@ -1,7 +1,6 @@
 import mongoose from 'mongoose'
 import cloudinary from '../lib/cloudinary.js'
 import User from '../models/user.model.js'
-import { checkImageForGore, ImageModerationError } from '../lib/imageModeration.js'
 
 export const nextProfilePhotoHistory = (user, uploaded, now) => {
   const history = (user.profilePicHistory || []).map(photo => photo.toObject ? photo.toObject() : { ...photo })
@@ -29,7 +28,6 @@ export const uploadProfilePic = async (req, res) => {
   let uploaded
   let committed = false
   try {
-    await checkImageForGore(image)
     uploaded = await cloudinary.uploader.upload(image, {
       folder: 'storytelling/profile-pictures',
       resource_type: 'image',
@@ -52,7 +50,6 @@ export const uploadProfilePic = async (req, res) => {
   } catch (error) {
     // Clean up only an upload that was never saved; historical profile pictures are never destroyed.
     if (uploaded && !committed) await cloudinary.uploader.destroy(uploaded.public_id).catch(() => {})
-    if (error instanceof ImageModerationError) return res.status(error.status).json({ error: error.message, code: error.code })
     return res.status(error.status || 500).json({ error: error.status === 404 ? 'User not found.' : 'Image upload failed. Please try again.' })
   }
 }

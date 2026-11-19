@@ -1,3 +1,4 @@
+import CommentReactions from '../components/CommentReactions.jsx'
 import UserCard from '../components/UserCard.jsx'
 import EmojiPicker from '../components/EmojiPicker.jsx'
 import { saveReadingPosition } from '../lib/readingProgress.js'
@@ -161,6 +162,18 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
     finally { commentDeleteRef.current = false; setDeletingCommentId(null) }
   }
 
+  const reactToComment = async (comment, emoji) => {
+    const chapter = discussion?.chapters.find(item => item.number === activeChapter)
+    if (!chapter || !ready) throw new Error('Discussion is still loading.')
+    const { data } = await api.put(`/stories/${encodeURIComponent(story.id)}/chapters/${chapter.id}/comments/${comment.id}/reaction`, { emoji })
+    const update = comments => comments.map(item => ({ ...item,
+      ...(item.id === data.id ? { reactions: data.reactions, myReaction: data.myReaction } : {}), replies: update(item.replies || []),
+    }))
+    setDiscussion(current => current?.userId === accountId && current?.storyId === story.id ? {
+      ...current, chapters: current.chapters.map(item => item.id === data.chapterId ? { ...item, comments: update(item.comments) } : item),
+    } : current)
+  }
+
   const renderComment = (comment, depth = 0) => (
     <article
       key={comment.id}
@@ -194,6 +207,7 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
         </time>
       </div>
       <p className={`mt-3 whitespace-pre-wrap break-words ${comment.deleted ? 'italic text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>{comment.body}</p>
+      {!comment.deleted && <CommentReactions comment={comment} onReact={emoji => reactToComment(comment, emoji)} disabled={loading || !ready} restricted={commentingRestricted} />}
       {user?.role === 'admin' && <div className="mt-3 flex flex-wrap justify-end gap-2">
         {!comment.deleted && <button type="button" onClick={() => deleteComment(comment.id, 'notice')} disabled={!!deletingCommentId} className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950 disabled:opacity-50">Replace with notice</button>}
         <button type="button" onClick={() => deleteComment(comment.id, 'hidden')} disabled={!!deletingCommentId} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950 disabled:opacity-50">{deletingCommentId === comment.id ? 'Deleting…' : 'Hide thread'}</button>

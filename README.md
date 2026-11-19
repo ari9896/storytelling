@@ -24,12 +24,8 @@ The root `package.json` holds backend dependencies and uses ES modules. The `fro
 To connect MongoDB later, copy `.env.example` to `.env` and set `MONGO_URI`. The API starts without a database while the story is still a local prototype.
 
 
-### Gore screening for new image uploads
+### Comment reactions
 
-Create a Sightengine account and obtain API keys from https://dashboard.sightengine.com/api-credentials. Set `SIGHTENGINE_API_USER` and `SIGHTENGINE_API_SECRET` in the root `.env` for local development and in Render's Environment settings for deployment. Keep these credentials server-side. Restart or redeploy after changing them.
+Signed-in readers can use React below a comment or reply to choose an emoji. Counts are visible to everyone; the current user's choice is highlighted. Selecting another emoji replaces the old choice, and clicking the selected emoji removes it. Reactions persist in the comment's `reactions` array with one entry per user, updated atomically. Public responses expose only counts and the current user's choice. They do not expose lists of reactor IDs.
 
-Profile pictures, story thumbnails, and new chapter images are checked before any images in the request are uploaded to Cloudinary. Existing stored images are not rescanned. Missing credentials, API failures, timeouts, and invalid moderation responses block new image uploads with a retry message. Text edits that reuse existing images still work.
-
-Only Sightengine's `gore-2.0` model is requested. The initial policy rejects scores of 0.70 or higher for very bloody content, exposed organs, serious injuries, or corpses. It does not filter nudity or reject minor injuries, general horror, or skull imagery alone. Scores are not guarantees; tune the threshold in `backend/lib/imageModeration.js` after reviewing real results. Animated GIFs are sampled by the provider, so not every frame is guaranteed to be checked.
-
-Run the offline mocked moderation checks with `node --test backend/lib/imageModeration.test.js`. These tests do not call Sightengine, Cloudinary, or MongoDB.
+Deleted comments cannot receive reactions. Comment restrictions also prevent adding or changing reactions (removing one's own remains allowed). Chapter access is checked on the server, and reactions never satisfy the comment requirement for unlocking chapters. Existing comments work without a migration. Run `node --test backend/lib/commentReactions.test.js` for the offline reaction checks.

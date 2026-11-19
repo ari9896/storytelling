@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { validReactionEmoji } from '../lib/commentReactions.js'
 
 const commentSchema = new mongoose.Schema({
   author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, immutable: true },
@@ -11,6 +12,13 @@ const commentSchema = new mongoose.Schema({
   deletedAt: { type: Date, default: null },
   deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   body: { type: String, required: true, trim: true, maxlength: 1000 },
+  reactions: { type: [new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    emoji: { type: String, required: true, validate: validReactionEmoji },
+  }, { _id: false })], default: [], validate: {
+    validator: reactions => new Set(reactions.map(reaction => String(reaction.userId))).size === reactions.length,
+    message: 'Each user can have only one reaction per comment.',
+  } },
   depth: { type: Number, required: true, default: 0, min: 0, max: 2, validate: Number.isInteger },
 }, { timestamps: true })
 

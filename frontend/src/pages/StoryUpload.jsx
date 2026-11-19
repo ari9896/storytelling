@@ -1,3 +1,4 @@
+import { useImageCrop } from '../lib/useImageCrop.jsx'
 import { countWords } from '../lib/wordCount.js'
 import ImageBackdrop from '../components/ImageBackdrop.jsx'
 import { api, authError } from '../lib/api.js'
@@ -10,6 +11,7 @@ const newChapter = () => ({ id: crypto.randomUUID(), title: '', text: '', images
 
 const StoryUpload = ({ mode = 'create' }) => {
   const { storyId } = useParams()
+  const { prepareImage, cropDialog } = useImageCrop()
   const editing = mode === 'edit'
   const [loadedId, setLoadedId] = useState(null)
   const [loadError, setLoadError] = useState('')
@@ -102,27 +104,33 @@ const StoryUpload = ({ mode = 'create' }) => {
     setChapters(current => current.filter((_item, index) => index !== chapterIndex))
     selectChapter(Math.max(0, chapterIndex - 1))
   }
-  const addImages = (event) => {
+  const addImages = async (event) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
     if (chapter.images.length + files.length > 5) { setError('Each chapter can have up to five pictures.'); return }
     if (files.some(file => !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type))) { setError('Choose PNG, JPEG, WebP, or GIF pictures.'); return }
     if (files.some(file => file.size > 5 * 1024 * 1024)) { setError('Each picture must be 5 MB or smaller.'); return }
-    const images = files.map(file => {
+    const images = []
+    for (const [index, original] of files.entries()) {
+      const file = await prepareImage(original, { title: `Adjust chapter picture ${index + 1} of ${files.length}` })
+      if (!file) break
       const url = URL.createObjectURL(file)
       urls.current.add(url)
-      return { id: crypto.randomUUID(), file, url }
-    })
+      images.push({ id: crypto.randomUUID(), file, url })
+    }
+    if (!images.length) return
     updateChapter({ images: [...chapter.images, ...images] })
     setImageIndex(chapter.images.length)
     setError('')
   }
-  const chooseThumbnail = event => {
-    const file = event.target.files?.[0]
+  const chooseThumbnail = async event => {
+    const original = event.target.files?.[0]
     event.target.value = ''
+    if (!original) return
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(original.type) || original.size > 5 * 1024 * 1024) { setError('Choose a PNG, JPEG, WebP, or GIF thumbnail up to 5 MB.'); return }
+    const file = await prepareImage(original, { title: 'Adjust story thumbnail', aspect: String(16 / 9) })
     if (!file) return
-    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type) || file.size > 5 * 1024 * 1024) { setError('Choose a PNG, JPEG, WebP, or GIF thumbnail up to 5 MB.'); return }
     if (thumbnail?.file) { URL.revokeObjectURL(thumbnail.url); urls.current.delete(thumbnail.url) }
     const url = URL.createObjectURL(file)
     urls.current.add(url)
@@ -308,6 +316,7 @@ const StoryUpload = ({ mode = 'create' }) => {
     </div>}
     {error && <p role="alert" className="mt-5 rounded-xl border border-red-200 dark:border-red-900 bg-white dark:bg-slate-900 p-4 text-sm font-semibold text-red-700 dark:text-red-300">{error}</p>}
     {saving && <p role="status" className="mt-4 text-sm text-blue-700 dark:text-blue-300">Uploading pictures and saving your story. Please keep this page open.</p>}
+    {cropDialog}
   </main>
 }
 

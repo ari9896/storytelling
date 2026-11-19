@@ -1,3 +1,4 @@
+import { reactionSummary } from '../lib/commentReactions.js'
 import User from '../models/user.model.js'
 import { effectiveCommentRestriction, restrictionMessage } from '../lib/commentRestriction.js'
 import { commentQualityMessage } from '../lib/commentQuality.js'
@@ -10,9 +11,10 @@ import { canReadChapter } from '../lib/storyAccess.js'
 import Story from '../models/story.model.js'
 
 export const DELETED_COMMENT_MESSAGE = 'This comment has been deleted by an admin or moderator.'
-export const commentTree = comments => {
+export const commentTree = (comments, userId = null) => {
   const nodes = new Map(comments.map(comment => [String(comment._id), {
     id: String(comment._id), authorId: String(comment.author?._id || comment.author), author: comment.author?.username || comment.authorName,
+    ...(comment.deletedAt ? { reactions: [], myReaction: null } : reactionSummary(comment.reactions, userId)),
     profilePic: comment.author?.profilePic || null, deleted: !!comment.deletedAt, hidden: !!comment.deletedAt && comment.deletionMode === 'hidden', body: comment.deletedAt ? DELETED_COMMENT_MESSAGE : comment.body, createdAt: comment.createdAt, replies: [],
   }]))
   const roots = []
@@ -37,7 +39,7 @@ export const getDiscussion = async (req, res) => {
     return res.json({ commentRestriction: effectiveCommentRestriction(req.user), userId: req.user ? String(req.user._id) : null, chapters: story.chapters.map((chapter, index) => ({
       id: String(chapter._id), number: chapter.number,
       hasCommented: !!req.user && chapter.commentedUserIds.some(id => String(id) === String(req.user._id)),
-      comments: (req.user ? canReadChapter(story, index, req.user) : index === 0) ? commentTree(comments.filter(comment => String(comment.chapterId) === String(chapter._id))) : [],
+      comments: (req.user ? canReadChapter(story, index, req.user) : index === 0) ? commentTree(comments.filter(comment => String(comment.chapterId) === String(chapter._id)), req.user?._id) : [],
     })) })
   } catch { return res.status(500).json({ error: 'Unable to load discussion and reading progress.' }) }
 }
@@ -89,7 +91,7 @@ export const postComment = async (req, res) => {
       savedChapter = { id: chapter._id, number: chapter.number }
       savedComments = await Comment.find({ storyId: story._id, chapterId: chapter._id }).sort({ createdAt: 1, _id: 1 }).session(session).populate('author', 'username profilePic').lean()
     })
-    return res.status(201).json({ chapterId: String(savedChapter.id), number: savedChapter.number, hasCommented: true, comments: commentTree(savedComments) })
+    return res.status(201).json({ chapterId: String(savedChapter.id), number: savedChapter.number, hasCommented: true, comments: commentTree(savedComments, req.user._id) })
   } catch (error) { return res.status(error.status || 500).json({ error: error.status ? error.message : 'Your comment could not be saved. Please try again.' }) }
 }
 

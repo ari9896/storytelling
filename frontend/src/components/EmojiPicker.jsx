@@ -12,7 +12,7 @@ const choices = [
   ['🩷','pink heart love'],['🩵','light blue heart'],['🩶','gray grey heart'],['💖','sparkling heart'],['💗','growing heart'],['💓','beating heart'],['💞','revolving hearts'],['💘','heart arrow'],['❤️‍🔥','heart on fire passionate'],['❤️‍🩹','mending heart healing'],['💥','boom explosion'],['💫','dizzy stars'],['🎊','confetti celebration'],['🏆','trophy winner'],['🥇','gold medal first'],['✅','check yes agree'],['❌','cross no'],['⚠️','warning'],['🚩','red flag'],['🫂','hug embrace'],['🧠','brain smart'],['👑','crown royalty'],['⚡','lightning electric'],['🌈','rainbow'],['🌻','sunflower'],['🌹','rose flower'],['🍀','clover luck'],['🍿','popcorn watching drama'],['☕','coffee'],['🍵','tea'],['🎨','art painting'],['🎭','theater drama'],['🎶','music notes'],['🐾','paw prints'],['🐈','cat'],['🐕','dog'],['🐺','wolf'],['🦊','fox'],['🦉','owl'],['🐍','snake'],['🐉','dragon'],['💦','water drops droplets sweat splashing'],['💧','water drop droplet'],['🌊','wave ocean sea water'],['🍆','eggplant aubergine vegetable'],
 ]
 
-const EmojiPicker = ({ textareaId, value, onChange, disabled = false }) => {
+const EmojiPicker = ({ textareaId, value, onChange, onSelect, onRequestOpen, triggerLabel = 'Emoji', disabled = false }) => {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const root = useRef(null)
@@ -27,6 +27,8 @@ const EmojiPicker = ({ textareaId, value, onChange, disabled = false }) => {
     return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
   }, [open])
   const insert = emoji => {
+    if (disabled) return
+    if (onSelect) { onSelect(emoji); setOpen(false); return }
     const textarea = document.getElementById(textareaId)
     if (!textarea || disabled) return
     const start = textarea.selectionStart ?? value.length
@@ -39,7 +41,7 @@ const EmojiPicker = ({ textareaId, value, onChange, disabled = false }) => {
   }
   const filtered = choices.filter(([emoji, label]) => label.includes(query.trim().toLowerCase()) || emoji === query.trim())
   return <div ref={root} className="relative mt-2">
-    <button ref={trigger} type="button" disabled={disabled} onClick={() => { setOpen(current => !current); setQuery('') }} aria-label="Add emoji" title="Add emoji" aria-expanded={open} aria-controls={id} className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-40 dark:text-blue-300 dark:hover:bg-blue-950"><FiSmile aria-hidden="true" />Emoji</button>
+    <button ref={trigger} type="button" disabled={disabled} onClick={() => { if (!open && onRequestOpen?.() === false) return; setOpen(current => !current); setQuery('') }} aria-label={triggerLabel === 'React' ? 'React with an emoji' : 'Add emoji'} title={triggerLabel === 'React' ? 'React with an emoji' : 'Add emoji'} aria-expanded={open} aria-controls={id} className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-40 dark:text-blue-300 dark:hover:bg-blue-950"><FiSmile aria-hidden="true" />{triggerLabel}</button>
     {open && !disabled && <div id={id} role="dialog" aria-label="Choose an emoji" className="absolute left-0 top-0 z-30 w-[min(24rem,calc(100vw-5rem))] rounded-2xl border border-blue-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-900">
       <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold text-slate-900 dark:text-slate-100">Choose an emoji</p><button type="button" onClick={() => { setOpen(false); trigger.current?.focus() }} aria-label="Close emoji picker" className="rounded-full p-2 text-slate-500 hover:bg-blue-50 dark:text-slate-400 dark:hover:bg-slate-800"><FiX /></button></div>
       <input autoFocus type="search" aria-label="Search emojis" placeholder="Search: fire, 100, heart…" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault() }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />

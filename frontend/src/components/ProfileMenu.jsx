@@ -1,3 +1,4 @@
+import { useImageCrop } from '../lib/useImageCrop.jsx'
 import { useViewportPanel } from '../lib/useViewportPanel.js'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/auth.js'
@@ -7,6 +8,7 @@ import { FiCamera, FiImage, FiUser, FiX, FiEdit2 } from 'react-icons/fi'
 
 const ProfileMenu = () => {
   const { user, loading, logout, requireAccount, uploadProfilePic, updateUsername } = useAuth()
+  const { prepareImage, cropDialog } = useImageCrop()
   const [editingUsername, setEditingUsername] = useState(false)
   const [usernameDraft, setUsernameDraft] = useState('')
   const [savingUsername, setSavingUsername] = useState(false)
@@ -55,11 +57,13 @@ const ProfileMenu = () => {
     setSuccess('')
     setUploading(true)
     try {
+      const prepared = await prepareImage(file, { title: 'Adjust profile picture', aspect: '1' })
+      if (!prepared) return
       const image = await new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result)
         reader.onerror = () => reject(new Error('Unable to read image.'))
-        reader.readAsDataURL(file)
+        reader.readAsDataURL(prepared)
       })
       await uploadProfilePic(image)
       setSuccess('Profile picture saved.')
@@ -124,6 +128,7 @@ const ProfileMenu = () => {
         </div>
         <p className="mt-4 text-xs leading-relaxed text-slate-500 dark:text-slate-400">PNG, JPEG, WebP, or GIF. Maximum 5 MB.</p>
       </div>}
+      {cropDialog}
     </div>
   )
 }

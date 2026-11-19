@@ -1,3 +1,4 @@
+import { setCommentReaction } from '../controllers/commentReaction.controller.js'
 import { saveReadingProgress } from '../controllers/readingProgress.controller.js'
 import { getDiscussion, postComment, softDeleteComment } from '../controllers/comment.controller.js'
 import express from 'express'
@@ -10,6 +11,7 @@ router.get('/:slug/discussion', protectRoute, getDiscussion)
 router.get('/:slug/discussion/public', getDiscussion)
 router.post('/:slug/chapters/:chapterId/comments', protectRoute, postComment)
 router.delete('/:slug/chapters/:chapterId/comments/:commentId', protectRoute, adminRoute, softDeleteComment)
+router.put('/:slug/chapters/:chapterId/comments/:commentId/reaction', protectRoute, setCommentReaction)
 router.patch('/:slug/progress', protectRoute, saveReadingProgress)
 router.get('/:slug/edit', protectRoute, requireStoryOwner, getStoryEditor)
 router.put('/:slug', protectRoute, requireStoryOwner, express.json({ limit: '40mb' }), updateStory)

@@ -3,16 +3,17 @@ import { afterEach, beforeEach, test } from 'node:test'
 import mongoose from 'mongoose'
 import Comment from '../models/comment.model.js'
 import Story from '../models/story.model.js'
+import User from '../models/user.model.js'
 import { commentTree } from '../controllers/comment.controller.js'
-import { setCommentReaction } from '../controllers/commentReaction.controller.js'
+import { getReactionUsers, setCommentReaction } from '../controllers/commentReaction.controller.js'
 import { reactionSummary, reactionUpdate, validReactionEmoji } from './commentReactions.js'
 
 const id = () => new mongoose.Types.ObjectId()
 const userId = id(), otherUserId = id(), chapterId = id(), commentId = id(), storyId = id()
 const document = () => ({ _id: commentId, storyId, chapterId, author: otherUserId, authorName: 'Reader', body: 'An interesting chapter with a lot to discuss.', reactions: [] })
-let originalFind, originalUpdate
-beforeEach(() => { originalFind = Story.findOne; originalUpdate = Comment.findOneAndUpdate })
-afterEach(() => { Story.findOne = originalFind; Comment.findOneAndUpdate = originalUpdate })
+let originalFind, originalUpdate, originalCommentFind, originalUserFind, originalUserCount
+beforeEach(() => { originalFind = Story.findOne; originalUpdate = Comment.findOneAndUpdate; originalCommentFind = Comment.findOne; originalUserFind = User.find; originalUserCount = User.countDocuments })
+afterEach(() => { Story.findOne = originalFind; Comment.findOneAndUpdate = originalUpdate; Comment.findOne = originalCommentFind; User.find = originalUserFind; User.countDocuments = originalUserCount })
 const resMock = () => ({ statusCode: 200, status(value) { this.statusCode = value; return this }, set() { return this }, json(body) { this.body = body; return this } })
 const request = emoji => ({ params: { slug: 'test-story', chapterId: String(chapterId), commentId: String(commentId) }, user: { _id: userId }, body: { emoji } })
 const story = () => ({ _id: storyId, chapters: [{ _id: chapterId, commentedUserIds: [] }] })
@@ -122,4 +123,67 @@ test('restricted users cannot add a reaction but can remove their existing react
   req.body.emoji = null
   const removed = resMock(); await setCommentReaction(req, removed)
   assert.equal(removed.statusCode, 200)
+})
+
+const peopleRequest = (query = {}) => ({ ...request('🔥'), query: { emoji: '🔥', ...query } })
+const commentQuery = value => ({ select(fields) { assert.equal(fields, 'reactions'); return this }, lean: async () => value })
+const usersQuery = (users, expectedSkip, expectedLimit) => ({
+  select(fields) { assert.equal(fields, 'username profilePic'); return this },
+  sort(order) { assert.deepEqual(order, { username: 1, _id: 1 }); return this },
+  skip(value) { assert.equal(value, expectedSkip); return this }, limit(value) { assert.equal(value, expectedLimit); return this }, lean: async () => users,
+})
+
+test('public hover preview caps at ten and whitelists profile data', async () => {
+  Story.findOne = async () => story()
+  const users = Array.from({ length: 12 }, (_, index) => ({ _id: id(), username: `Reader${index}`, profilePic: '/photo.jpg', email: 'private@example.com', signupIp: 'private' }))
+  Comment.findOne = scope => {
+    assert.deepEqual(scope, { _id: String(commentId), storyId, chapterId: String(chapterId), deletedAt: null })
+    return commentQuery({ reactions: [...users.map(user => ({ userId: user._id, emoji: '🔥' })), { userId: otherUserId, emoji: '💯' }] })
+  }
+  const expectedIds = users.map(user => String(user._id))
+  User.countDocuments = async filter => { assert.deepEqual(filter, { _id: { $in: expectedIds } }); return 12 }
+  User.find = filter => { assert.deepEqual(filter, { _id: { $in: expectedIds } }); return usersQuery(users.slice(0, 10), 0, 10) }
+  const req = peopleRequest(); req.user = null
+  const res = resMock(); await getReactionUsers(req, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.users.length, 10)
+  assert.equal(res.body.total, 12)
+  assert.equal(res.body.hasMore, true)
+  for (const user of res.body.users) assert.deepEqual(Object.keys(user).sort(), ['id', 'profilePic', 'username'])
+  assert.equal(JSON.stringify(res.body).includes('private'), false)
+})
+
+test('full lists paginate without returning unlimited users', async () => {
+  Story.findOne = async () => story()
+  Comment.findOne = () => commentQuery({ reactions: [{ userId, emoji: '🔥' }] })
+  User.countDocuments = async () => 55
+  User.find = () => usersQuery([{ _id: userId, username: 'Reader' }], 50, 50)
+  const res = resMock(); await getReactionUsers(peopleRequest({ page: '2', limit: '50' }), res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.page, 2)
+  assert.equal(res.body.hasMore, false)
+  assert.equal(res.body.users[0].profilePic, null)
+})
+
+test('reaction lists reject invalid emojis, page sizes and identifiers before querying', async () => {
+  Story.findOne = () => assert.fail('unexpected query')
+  for (const query of [{ limit: '51' }, { page: '0' }, { page: '1abc' }, { limit: '-1' }, { emoji: 'hello' }]) {
+    const res = resMock(); await getReactionUsers(peopleRequest(query), res)
+    assert.equal(res.statusCode, 400)
+  }
+  const req = peopleRequest(); req.params.commentId = 'invalid'
+  const res = resMock(); await getReactionUsers(req, res)
+  assert.equal(res.statusCode, 400)
+})
+
+test('reaction identities are unavailable for locked chapters and deleted comments', async () => {
+  Comment.findOne = () => assert.fail('must check chapter access first')
+  Story.findOne = async () => ({ _id: storyId, chapters: [{ _id: id(), commentedUserIds: [] }, { _id: chapterId }] })
+  const req = peopleRequest(); req.user = null
+  const locked = resMock(); await getReactionUsers(req, locked)
+  assert.equal(locked.statusCode, 403)
+  Story.findOne = async () => story()
+  Comment.findOne = scope => { assert.equal(scope.deletedAt, null); return commentQuery(null) }
+  const deleted = resMock(); await getReactionUsers(peopleRequest(), deleted)
+  assert.equal(deleted.statusCode, 404)
 })

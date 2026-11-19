@@ -207,7 +207,7 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
         </time>
       </div>
       <p className={`mt-3 whitespace-pre-wrap break-words ${comment.deleted ? 'italic text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>{comment.body}</p>
-      {!comment.deleted && <CommentReactions comment={comment} onReact={emoji => reactToComment(comment, emoji)} disabled={loading || !ready} restricted={commentingRestricted} />}
+      {!comment.deleted && <CommentReactions comment={comment} storyId={story.id} chapterId={activeSlide.chapterId} onProfile={setSelectedProfile} onReact={emoji => reactToComment(comment, emoji)} disabled={loading || !ready} restricted={commentingRestricted} />}
       {user?.role === 'admin' && <div className="mt-3 flex flex-wrap justify-end gap-2">
         {!comment.deleted && <button type="button" onClick={() => deleteComment(comment.id, 'notice')} disabled={!!deletingCommentId} className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950 disabled:opacity-50">Replace with notice</button>}
         <button type="button" onClick={() => deleteComment(comment.id, 'hidden')} disabled={!!deletingCommentId} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950 disabled:opacity-50">{deletingCommentId === comment.id ? 'Deleting…' : 'Hide thread'}</button>

@@ -1,3 +1,4 @@
+import { useViewportPanel } from '../lib/useViewportPanel.js'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FiBell, FiX } from 'react-icons/fi'
@@ -10,6 +11,8 @@ const NotificationMenu = () => {
   const [busy, setBusy] = useState(false)
   const root = useRef(null)
   const trigger = useRef(null)
+  const panelRef = useRef(null)
+  useViewportPanel(open, root, panelRef)
   const navigate = useNavigate()
   useEffect(() => {
     let active = true
@@ -64,7 +67,7 @@ const NotificationMenu = () => {
       <FiBell aria-hidden="true" />
       {count > 0 && <span aria-hidden="true" className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full border-2 border-white dark:border-slate-700 bg-red-600 px-1 text-[10px] font-bold text-white">{count > 99 ? '99+' : count}</span>}
     </button>
-    {open && <section id="notifications-panel" aria-label="Notifications" className="absolute right-0 top-full z-40 mt-3 w-[min(23rem,calc(100vw-7rem))] overflow-hidden rounded-2xl border border-blue-100 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl">
+    {open && <section ref={panelRef} id="notifications-panel" aria-label="Notifications" className="absolute right-0 top-full z-40 mt-3 w-[min(23rem,calc(100vw_-_2rem))] overflow-y-auto overscroll-contain rounded-2xl border border-blue-100 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl">
       <div className="flex items-center justify-between p-4"><h2 className="font-bold text-slate-900 dark:text-slate-100">Notifications</h2><button type="button" onClick={() => setOpen(false)} aria-label="Close notifications" className="rounded-full p-2 text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-800"><FiX /></button></div>
       {count > 0 && <button type="button" disabled={busy} onClick={markAll} className="mx-4 mb-3 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:underline disabled:opacity-50">Mark all as read</button>}
       {error && <p role="alert" className="px-4 pb-4 text-sm text-red-700 dark:text-red-300">{error}</p>}

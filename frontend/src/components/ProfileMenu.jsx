@@ -1,3 +1,4 @@
+import { useViewportPanel } from '../lib/useViewportPanel.js'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/auth.js'
 import { authError } from '../lib/api.js'
@@ -18,6 +19,8 @@ const ProfileMenu = () => {
   const [error, setError] = useState('')
   const menuRef = useRef(null)
   const inputRef = useRef(null)
+  const panelRef = useRef(null)
+  useViewportPanel(open, menuRef, panelRef)
 
   useEffect(() => {
     if (!open) return undefined
@@ -89,7 +92,7 @@ const ProfileMenu = () => {
         {photoUrl ? <img src={photoUrl} alt="" className="h-full w-full object-cover" /> : <FiUser aria-hidden="true" />}
       </button>
 
-      {open && <div id="profile-picture-menu" className="absolute right-0 top-full z-40 mt-3 w-[min(20rem,calc(100vw-2.5rem))] rounded-3xl border border-blue-100 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 text-slate-900 dark:text-slate-100 shadow-2xl shadow-blue-950/20">
+      {open && <div ref={panelRef} id="profile-picture-menu" className="absolute right-0 top-full z-40 mt-3 w-[min(20rem,calc(100vw_-_2rem))] overflow-y-auto overscroll-contain rounded-3xl border border-blue-100 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 text-slate-900 dark:text-slate-100 shadow-2xl shadow-blue-950/20">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Your space</p>

@@ -1,3 +1,4 @@
+import { configureProxyTrust } from './lib/signupIp.js'
 import { serveFrontend } from './lib/serveFrontend.js'
 import feedbackRouter from './routes/feedback.route.js'
 import notificationRouter from './routes/notification.route.js'
@@ -11,6 +12,7 @@ import { connectDB } from './lib/connectDB.js'
 import userRouter from './routes/user.route.js'
 
 const app = express()
+configureProxyTrust(app)
 const PORT = process.env.PORT || 5016
 
 app.use(cors({

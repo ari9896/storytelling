@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, minlength: 3, maxlength: 20, match: /^[a-zA-Z0-9]+$/ },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true, select: false },
+  signupIp: { type: String, default: null, select: false },
   role: { type: String, enum: ['reader', 'admin'], default: 'reader' },
   profilePic: { type: String, default: null },
   profilePicPublicId: { type: String, default: null },

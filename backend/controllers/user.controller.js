@@ -1,3 +1,4 @@
+import { signupIp } from '../lib/signupIp.js'
 import User from '../models/user.model.js'
 import validator from 'validator'
 import bcrypt from 'bcryptjs'
@@ -38,7 +39,7 @@ export const signup = async (req, res) => {
     const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { username }] })
     if (existingUser) return res.status(400).json({ error: 'Email or username already in use.' })
     const hash = await bcrypt.hash(password, 10)
-    const user = await User.create({ username, email: normalizedEmail, password: hash })
+    const user = await User.create({ username, email: normalizedEmail, password: hash, signupIp: signupIp(req) })
     return res.status(201).json(publicUser(user))
   } catch (error) {
     if (error.code === 11000) return res.status(400).json({ error: 'Email or username already in use.' })

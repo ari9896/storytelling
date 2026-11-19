@@ -26,7 +26,7 @@ const Navbar = () => {
   return (
     <header ref={headerRef} className="sticky top-0 z-30 border-b border-white/60 dark:border-slate-800 bg-sky-50/80 dark:bg-slate-950/90 shadow-sm shadow-blue-900/5 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-5 gap-y-3 px-5 py-3 sm:px-8">
-        <Link to="/" aria-label="Storytelling home" className="group flex items-center gap-3 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+        <Link to="/" aria-label="Storytelling home" className="group flex w-full items-center gap-3 rounded-xl sm:w-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-blue-700 text-xl text-white shadow-md shadow-blue-700/20 transition group-hover:-rotate-6">
             <FiFeather aria-hidden="true" />
           </span>
@@ -36,13 +36,13 @@ const Navbar = () => {
           </span>
         </Link>
 
-        <nav aria-label="Main navigation" className="order-3 flex w-full items-center gap-2 border-t border-blue-100 dark:border-slate-700 pt-3 lg:order-2 lg:w-auto lg:border-0 lg:pt-0">
+        <nav aria-label="Main navigation" className={`${user?.role === 'admin' ? 'flex' : 'hidden sm:flex'} order-3 w-full items-center gap-2 border-t border-blue-100 dark:border-slate-700 pt-3 lg:order-2 lg:w-auto lg:border-0 lg:pt-0`}>
           <Link to="/" aria-current={homeActive ? 'page' : undefined}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-blue-600 ${homeActive ? 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-900 hover:text-blue-800 dark:hover:text-blue-200'}`}>
+            className={`hidden items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition sm:flex focus-visible:outline-2 focus-visible:outline-blue-600 ${homeActive ? 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-900 hover:text-blue-800 dark:hover:text-blue-200'}`}>
             <FiHome aria-hidden="true" /> Home
           </Link>
           <Link to="/#stories" aria-current={storiesActive ? 'page' : undefined}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-blue-600 ${storiesActive ? 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-900 hover:text-blue-800 dark:hover:text-blue-200'}`}>
+            className={`hidden items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition sm:flex focus-visible:outline-2 focus-visible:outline-blue-600 ${storiesActive ? 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-900 hover:text-blue-800 dark:hover:text-blue-200'}`}>
             <FiBookOpen aria-hidden="true" /> Stories
           </Link>
           {user?.role === 'admin' && <UsersAdminLink key={user._id} />}
@@ -50,11 +50,13 @@ const Navbar = () => {
         </nav>
 
 
-        {!user && !loading && <div className="order-2 flex items-center gap-3 text-sm font-semibold lg:order-3"><Link to="/login" className="text-blue-700 dark:text-blue-300 hover:underline">Log in</Link><Link to="/signup" className="rounded-full border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 px-4 py-2 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800">Sign up</Link></div>}
-        <div className="order-2 flex items-center gap-3 lg:order-3">
-          <ThemeToggle />
-          {user && <NotificationMenu key={user._id} />}
-          <ProfileMenu />
+        <div className="order-2 flex w-full flex-wrap items-center justify-end gap-3 border-t border-blue-100 pt-3 dark:border-slate-700 sm:w-auto sm:border-0 sm:pt-0 lg:order-3">
+          {!user && !loading && <div className="flex items-center gap-3 text-sm font-semibold"><Link to="/login" className="text-blue-700 dark:text-blue-300 hover:underline">Log in</Link><Link to="/signup" className="rounded-full border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 px-4 py-2 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800">Sign up</Link></div>}
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            {user && <NotificationMenu key={user._id} />}
+            <ProfileMenu />
+          </div>
         </div>
       </div>
     </header>

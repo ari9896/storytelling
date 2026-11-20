@@ -1,3 +1,4 @@
+import { isPublishedChapter, publishedChapters } from './chapterPublication.js'
 import Notification from '../models/notification.model.js'
 
 let indexSetup
@@ -11,7 +12,7 @@ export const ensureChapterNotificationIndexes = () => {
 }
 
 export const notifyNewChapters = async (previousCount, story, actor, session) => {
-  const added = Array.isArray(previousCount) ? story.chapters.filter(chapter => !previousCount.includes(String(chapter._id))) : story.chapters.slice(previousCount)
+  const added = Array.isArray(previousCount) ? story.chapters.filter(chapter => isPublishedChapter(chapter) && !previousCount.includes(String(chapter._id))) : publishedChapters(story).slice(previousCount)
   if (!added.length) return
   const readers = new Map([...story.chapters, ...(story.archivedChapters || [])].flatMap(chapter => chapter.commentedUserIds || []).map(id => [String(id), id]))
   readers.delete(String(actor._id))

@@ -1,3 +1,4 @@
+import { hasPublishedChapters, isPublishedChapter } from '../lib/chapterPublication.js'
 import { reactionSummary } from '../lib/commentReactions.js'
 import User from '../models/user.model.js'
 import { effectiveCommentRestriction, restrictionMessage } from '../lib/commentRestriction.js'
@@ -32,7 +33,7 @@ export const getDiscussion = async (req, res) => {
   res.set('Cache-Control', 'private, no-store')
   try {
     const story = await loadStory(req.params.slug)
-    if (!story) return res.status(404).json({ error: 'Story not found.' })
+    if (!story || !hasPublishedChapters(story)) return res.status(404).json({ error: 'Story not found.' })
     await ensureCommentMigration(story)
     const readableIds = story.chapters.filter((_chapter, index) => canReadChapter(story, index, req.user)).map(chapter => chapter._id)
     const comments = await Comment.find({ storyId: story._id, chapterId: { $in: readableIds } }).sort({ createdAt: 1, _id: 1 }).populate('author', 'username profilePic').lean()
@@ -40,7 +41,7 @@ export const getDiscussion = async (req, res) => {
       id: String(chapter._id), number: chapter.number,
       hasCommented: !!req.user && chapter.commentedUserIds.some(id => String(id) === String(req.user._id)),
       comments: (req.user ? canReadChapter(story, index, req.user) : index === 0) ? commentTree(comments.filter(comment => String(comment.chapterId) === String(chapter._id)), req.user?._id) : [],
-    })) })
+    })).filter((_chapter, index) => isPublishedChapter(story.chapters[index])) })
   } catch { return res.status(500).json({ error: 'Unable to load discussion and reading progress.' }) }
 }
 

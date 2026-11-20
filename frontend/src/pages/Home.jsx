@@ -1,3 +1,4 @@
+import MyDraftStories from '../components/MyDraftStories.jsx'
 import StoryRating from '../components/StoryRating.jsx'
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
@@ -35,6 +36,8 @@ const Home = () => {
         </Link>
       </div>
     </section>
+
+    <MyDraftStories />
 
     <section id="stories" className="scroll-mt-32 pt-10">
       <div className="mb-5">

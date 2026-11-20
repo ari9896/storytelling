@@ -63,3 +63,16 @@ Allow story invitations is on by default and can be disabled in the profile menu
 A unique partial notification index prevents more than one unread invitation per recipient/story, including concurrent sends. Authors can send up to 20 invitations per rolling 24 hours, reserved atomically using a private per-account quota array; failed or duplicate inserts release their reservation. Reading an invitation allows a later invitation within the daily limit. Only story creators can search invitees or send invitations. The invitation index is created automatically along with the existing notification index migration.
 
 Run `node --test backend/lib/storyInvitations.test.js` for offline invitation, privacy, preference, quota, and destination checks.
+
+
+### Private chapter drafts and publishing
+
+New chapters in the editor start as Draft. Save changes stores unfinished titles/text and images without publishing them. The chapter visibility selector switches between Draft (private) and Published (visible to readers), taking effect on save. Published chapters need a title and text and must form the beginning of the chapter sequence; publish earlier chapters before later ones. To unpublish an earlier chapter, first mark later chapters Draft. Existing chapters without a status remain published, and update requests that omit an existing chapter's status preserve it. New API chapters without an explicit status are drafts.
+
+A private Your drafts section on the home page links the creator back to their editor, including stories with no published chapters. Stories containing only drafts are excluded from the public library and direct reader requests. Public chapter lists, discussions, comments, reaction endpoints, bookmark restoration, invitations, and notifications exclude draft chapters. The creator's protected editor returns all chapters, including incomplete drafts. Other users, including other admins, cannot access that editor.
+
+Saving drafts sends no new-chapter notifications. Publishing a previously saved draft sends the usual notification to participating readers, using chapter IDs and unique notification indexes to avoid duplicates for the same recipient/chapter. Comments and reading-progress markers are preserved when chapters are unpublished or republished. The library description comes from the first published chapter, never private draft text.
+
+This adds publication controls for whole chapters; edits to a chapter that remains Published become public when saved. It does not keep a separate private revision of a published chapter.
+
+Run `node --test backend/lib/chapterDrafts.test.js` for offline publication, privacy, persistence, progression, and notification checks.

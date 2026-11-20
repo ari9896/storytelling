@@ -1,3 +1,4 @@
+import { hasPublishedChapters, isPublishedChapter, publishedChapters, resolveChapterStatus } from '../lib/chapterPublication.js'
 import ReadingProgress from '../models/readingProgress.model.js'
 import { resumeChapterId } from './readingProgress.controller.js'
 import mongoose from 'mongoose'
@@ -10,7 +11,7 @@ import Story, { STORY_RATINGS } from '../models/story.model.js'
 import cloudinary from '../lib/cloudinary.js'
 
 const validText = (value, max) => typeof value === 'string' && value.trim().length > 0 && value.length <= max
-export const validateStoryInput = (body, allowExistingImages = false) => {
+export const validateStoryInput = (body, allowExistingImages = false, existingStory = null) => {
   if (!body || !validText(body.title, 200)) return 'Enter a story title (up to 200 characters).'
   if (body.contentRating !== undefined && !STORY_RATINGS.includes(body.contentRating)) return 'Choose Unrated, Everyone, Teen, or Mature for the content rating.'
   if (!Array.isArray(body.chapters) || !body.chapters.length || body.chapters.length > 50) return 'Add between 1 and 50 chapters.'
@@ -26,8 +27,15 @@ export const validateStoryInput = (body, allowExistingImages = false) => {
       totalBytes += size
     }
   }
+  let seenDraft = false
+  const existingById = new Map((existingStory?.chapters || []).map(chapter => [String(chapter._id), chapter]))
   for (const chapter of body.chapters) {
-    if (!chapter || !validText(chapter.title, 200) || !validText(chapter.text, 100000)) return 'Every chapter needs a title and text.'
+    if (!chapter || (chapter.status !== undefined && !['draft', 'published'].includes(chapter.status))) return 'Choose Draft or Published for each chapter.'
+    const status = resolveChapterStatus(chapter, existingById.get(chapter.id))
+    if (typeof chapter.title !== 'string' || chapter.title.length > 200 || typeof chapter.text !== 'string' || chapter.text.length > 100000) return 'Chapter titles can be up to 200 characters and text up to 100,000 characters.'
+    if (status === 'published' && (!validText(chapter.title, 200) || !validText(chapter.text, 100000))) return 'Published chapters need a title and text. Leave unfinished chapters as Draft.'
+    if (status === 'published' && seenDraft) return 'Publish chapters in order. Published chapters must come before drafts.'
+    if (status === 'draft') seenDraft = true
     if (!Array.isArray(chapter.images) || chapter.images.length > 5) return 'Each chapter can have up to five pictures.'
     for (const image of chapter.images) {
       if (image?.explanation != null && (typeof image.explanation !== 'string' || image.explanation.length > 2000)) return 'Image explanations can be up to 2,000 characters.'
@@ -46,12 +54,12 @@ export const readerStory = (story, user) => ({
   contentRating: story.contentRating || 'unrated',
   creatorId: story.creatorId ? String(story.creatorId) : null,
   id: story.slug, title: story.title, description: story.description,
-  plannedChapterCount: story.plannedChapterCount || null, availableChapterCount: story.chapters.length,
+  plannedChapterCount: story.plannedChapterCount || null, availableChapterCount: publishedChapters(story).length,
 
   coverImage: story.thumbnail?.url || null, coverAlt: story.thumbnail?.alt || '', label: 'Story',
   slides: [
     ...(story.authorNote ? [{ type: 'note', title: story.authorNote.title, text: story.authorNote.text }] : story.storytellerNote ? [{ type: 'note', title: 'A note from the storyteller', text: story.storytellerNote }] : []),
-    ...story.chapters.map((chapter, index) => ({
+    ...story.chapters.map((chapter, index) => ({ chapter, index })).filter(({ chapter }) => isPublishedChapter(chapter)).map(({ chapter, index }) => ({
       type: 'story', chapterId: String(chapter._id), chapter: chapter.number, title: chapter.title,
       locked: !canReadChapter(story, index, user),
       ...(canReadChapter(story, index, user) ? { text: chapter.text, images: chapter.images.map(image => ({ url: image.url, alt: image.alt, explanation: image.explanation || '' })) } : {}),
@@ -77,14 +85,14 @@ export const createStory = async (req, res) => {
         uploaded.push(asset.public_id)
         images.push({ url: asset.secure_url, publicId: asset.public_id, alt: typeof image.alt === 'string' ? image.alt.slice(0, 500) : '', explanation: image.explanation || '' })
       }
-      chapters.push({ number: index + 1, title: chapter.title.trim(), text: chapter.text, images })
+      chapters.push({ number: index + 1, status: resolveChapterStatus(chapter), title: chapter.title.trim(), text: chapter.text, images })
     }
     const story = await Story.create({
       creatorId: req.user._id,
       title: req.body.title.trim(), slug,
       contentRating: req.body.contentRating ?? 'unrated',
       plannedChapterCount: req.body.plannedChapterCount ?? null,
-      description: chapters[0].text.slice(0, 180),
+      description: (chapters.find(isPublishedChapter)?.text || '').slice(0, 180),
       thumbnail,
       authorNote: req.body.authorNote ? { title: req.body.authorNote.title.trim(), text: req.body.authorNote.text } : null,
       chapters,
@@ -100,7 +108,7 @@ export const createStory = async (req, res) => {
 export const listStories = async (req, res) => {
   res.set('Cache-Control', 'private, no-store')
   try {
-    const stories = await Story.find({ deletedAt: null, slug: { $nin: retiredStorySlugs }, ...(req.user?.showMatureStories === true ? {} : { contentRating: { $ne: 'mature' } }) }).select('title slug description thumbnail contentRating').sort({ createdAt: -1 }).lean()
+    const stories = await Story.find({ deletedAt: null, chapters: { $elemMatch: { status: { $ne: 'draft' } } }, slug: { $nin: retiredStorySlugs }, ...(req.user?.showMatureStories === true ? {} : { contentRating: { $ne: 'mature' } }) }).select('title slug description thumbnail contentRating').sort({ createdAt: -1 }).lean()
     return res.json(stories.map(story => ({ id: story.slug, title: story.title, contentRating: story.contentRating || 'unrated', description: story.description, coverImage: story.thumbnail?.url || null, coverAlt: story.thumbnail?.alt || '', label: 'Story' })))
   } catch { return res.status(500).json({ error: 'Unable to load saved stories.' }) }
 }
@@ -109,7 +117,7 @@ export const getStory = async (req, res) => {
   try {
     res.set('Cache-Control', 'private, no-store')
     const story = await loadStory(req.params.slug)
-    if (!story) return res.status(404).json({ error: 'Story not found.' })
+    if (!story || !hasPublishedChapters(story)) return res.status(404).json({ error: 'Story not found.' })
     const progress = req.user ? await ReadingProgress.findOne({ userId: req.user._id, storyId: story._id }).lean() : null
     return res.json({ ...readerStory(story, req.user), resumeChapterId: resumeChapterId(story, req.user, progress), resumeParagraphIndex: resumeChapterId(story, req.user, progress) && Number.isInteger(progress?.paragraphIndex) ? progress.paragraphIndex : null })
   } catch { return res.status(500).json({ error: 'Unable to load this story.' }) }
@@ -131,14 +139,14 @@ export const getStoryEditor = (req, res) => {
   return res.json({ id: story.slug, version: story.__v, title: story.title, contentRating: story.contentRating || 'unrated', plannedChapterCount: story.plannedChapterCount || null,
     thumbnail: story.thumbnail || null,
     authorNote: story.authorNote || (story.storytellerNote ? { title: 'A note from the storyteller', text: story.storytellerNote } : null),
-    chapters: story.chapters.map(chapter => ({ id: String(chapter._id), title: chapter.title, text: chapter.text,
+    chapters: story.chapters.map(chapter => ({ id: String(chapter._id), status: chapter.status || 'published', title: chapter.title, text: chapter.text,
       images: chapter.images.map(image => ({ url: image.url, alt: image.alt, explanation: image.explanation || '', publicId: image.publicId })) })),
   })
 }
 
 export const updateStory = async (req, res) => {
   const story = req.ownedStory
-  const validation = validateStoryInput(req.body, true)
+  const validation = validateStoryInput(req.body, true, story)
   if (validation) return res.status(400).json({ error: validation })
   if (req.body.version !== story.__v) return res.status(409).json({ error: 'This story has changed. Reload the editor before saving again.' })
   const existingById = new Map(story.chapters.map(chapter => [String(chapter._id), chapter]))
@@ -172,9 +180,9 @@ export const updateStory = async (req, res) => {
           images.push({ url: asset.secure_url, publicId: asset.public_id, alt: '', explanation: image.explanation || '' })
         }
       }
-      chapters.push({ title: chapter.title.trim(), text: chapter.text, images, number: index + 1 })
+      chapters.push({ status: resolveChapterStatus(chapter, existingById.get(chapter.id)), title: chapter.title.trim(), text: chapter.text, images, number: index + 1 })
     }
-    const fields = { contentRating: req.body.contentRating === undefined ? (story.contentRating || 'unrated') : req.body.contentRating, plannedChapterCount: req.body.plannedChapterCount === undefined ? story.plannedChapterCount : req.body.plannedChapterCount, title: req.body.title.trim(), authorNote: req.body.authorNote || null, storytellerNote: '', description: chapters[0].text.slice(0, 180), thumbnail }
+    const fields = { contentRating: req.body.contentRating === undefined ? (story.contentRating || 'unrated') : req.body.contentRating, plannedChapterCount: req.body.plannedChapterCount === undefined ? story.plannedChapterCount : req.body.plannedChapterCount, title: req.body.title.trim(), authorNote: req.body.authorNote || null, storytellerNote: '', description: (chapters.find(isPublishedChapter)?.text || '').slice(0, 180), thumbnail }
     const candidate = new Story({ ...story.toObject(), ...fields, chapters: chapters.map((chapter, index) => ({ ...(existingById.get(req.body.chapters[index].id)?.toObject() || {}), ...chapter })) })
     await candidate.validate()
     // Merge editor fields into the current database chapters, preserving comments posted while editing.
@@ -186,19 +194,20 @@ export const updateStory = async (req, res) => {
         { $map: { input: { $filter: { input: '$chapters', as: 'old', cond: { $not: [{ $in: ['$$old._id', { $literal: candidate.chapters.map(chapter => chapter._id) }] }] } } }, as: 'removed', in: { $mergeObjects: ['$$removed', { deletedAt: { $literal: new Date() } }] } } },
       ] },
       chapters: { $map: {
-        input: { $literal: candidate.chapters.map(chapter => ({ _id: chapter._id, number: chapter.number, title: chapter.title, text: chapter.text, images: chapter.images.map(image => image.toObject()) })) }, as: 'edited',
+        input: { $literal: candidate.chapters.map(chapter => ({ _id: chapter._id, status: chapter.status, number: chapter.number, title: chapter.title, text: chapter.text, images: chapter.images.map(image => image.toObject()) })) }, as: 'edited',
         in: { $mergeObjects: [
           { $ifNull: [{ $arrayElemAt: [{ $filter: { input: '$chapters', as: 'old', cond: { $eq: ['$$old._id', '$$edited._id'] } } }, 0] }, { comments: [], commentedUserIds: [] }] },
           '$$edited',
         ] },
       } },
     } }]
-    const hasAddedChapters = req.body.chapters.some(chapter => !chapter.id)
+    const previouslyPublishedIds = publishedChapters(story).map(chapter => String(chapter._id))
+    const hasAddedChapters = candidate.chapters.some(chapter => isPublishedChapter(chapter) && !previouslyPublishedIds.includes(String(chapter._id)))
     if (hasAddedChapters) await ensureChapterNotificationIndexes()
     let updated
     await mongoose.connection.transaction(async session => {
       updated = await Story.findOneAndUpdate({ _id: story._id, creatorId: req.user._id, deletedAt: null, __v: req.body.version }, pipeline, { new: true, updatePipeline: true, session })
-      if (updated && hasAddedChapters) await notifyNewChapters(story.chapters.map(chapter => String(chapter._id)), updated, req.user, session)
+      if (updated && hasAddedChapters) await notifyNewChapters(previouslyPublishedIds, updated, req.user, session)
     })
     if (!updated) {
       await Promise.allSettled(uploaded.map(id => cloudinary.uploader.destroy(id)))
@@ -227,4 +236,16 @@ const uploadThumbnail = async (image, slug, uploaded) => {
   const asset = await cloudinary.uploader.upload(image.data, { folder: `storytelling/stories/${slug}/thumbnail`, resource_type: 'image', allowed_formats: ['png', 'jpg', 'jpeg', 'webp', 'gif'] })
   uploaded.push(asset.public_id)
   return { url: asset.secure_url, publicId: asset.public_id, alt: typeof image.alt === 'string' ? image.alt.slice(0, 500) : '' }
+}
+
+export const listDraftStories = async (req, res) => {
+  res.set('Cache-Control', 'private, no-store')
+  try {
+    const stories = await Story.find({ creatorId: req.user._id, deletedAt: null, 'chapters.status': 'draft' })
+      .select('title slug chapters.status').sort({ updatedAt: -1, _id: -1 }).lean()
+    return res.json(stories.map(story => ({ id: story.slug, title: story.title,
+      draftChapterCount: story.chapters.filter(chapter => !isPublishedChapter(chapter)).length,
+      publishedChapterCount: publishedChapters(story).length,
+    })))
+  } catch { return res.status(500).json({ error: 'Unable to load your drafts. Please try again.' }) }
 }

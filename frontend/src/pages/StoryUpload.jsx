@@ -7,7 +7,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiImage, FiPlus, FiTrash2, FiChevronDown, FiSave } from 'react-icons/fi'
 import { useAuth } from '../context/auth.js'
 
-const newChapter = () => ({ id: crypto.randomUUID(), title: '', text: '', images: [] })
+const newChapter = () => ({ id: crypto.randomUUID(), status: 'draft', title: '', text: '', images: [] })
 
 const StoryUpload = ({ mode = 'create' }) => {
   const { storyId } = useParams()
@@ -80,7 +80,7 @@ const StoryUpload = ({ mode = 'create' }) => {
       setThumbnail(data.thumbnail)
       setAuthorNote(data.authorNote)
       setVersion(data.version)
-      setChapters(data.chapters.map(chapter => ({ ...chapter, chapterId: chapter.id, images: chapter.images.map((image, index) => ({ ...image, id: `${chapter.id}-${index}` })) })))
+      setChapters(data.chapters.map(chapter => ({ ...chapter, status: chapter.status || 'published', chapterId: chapter.id, images: chapter.images.map((image, index) => ({ ...image, id: `${chapter.id}-${index}` })) })))
       setChapterIndex(0)
       setImageIndex(0)
       setLoadedId(storyId)
@@ -98,7 +98,14 @@ const StoryUpload = ({ mode = 'create' }) => {
   const chapter = chapters[chapterIndex]
   const image = chapter.images[imageIndex]
   const chapterWordCount = countWords(chapter.text)
+  const publishedCount = chapters.filter(item => item.status !== 'draft').length
   const updateChapter = (values) => setChapters(current => current.map((item, index) => index === chapterIndex ? { ...item, ...values } : item))
+  const changeChapterStatus = status => {
+    if (status === 'published' && chapters.slice(0, chapterIndex).some(item => item.status === 'draft')) { setError('Publish earlier chapters first so readers can follow the story in order.'); return }
+    if (status === 'draft' && chapters.slice(chapterIndex + 1).some(item => item.status !== 'draft')) { setError('Set later chapters to Draft first before making this chapter private.'); return }
+    updateChapter({ status })
+    setError('')
+  }
   const selectChapter = (index) => { setThumbnailView(false); setChapterIndex(index); setImageIndex(0); setError('') }
   const deleteChapter = () => {
     if (chapters.length <= 1) { setError('Keep at least one chapter in the story.'); return }
@@ -155,7 +162,8 @@ const StoryUpload = ({ mode = 'create' }) => {
   const saveStory = async () => {
     if (saving || syncFailed) return
     if (plannedChapterCount !== '' && (!Number.isInteger(Number(plannedChapterCount)) || Number(plannedChapterCount) < chapters.length || Number(plannedChapterCount) > 10000)) { setError('Planned chapters must be a whole number at least as large as your available chapters (up to 10,000).'); return }
-    if (!title.trim() || chapters.some(item => !item.title.trim() || !item.text.trim())) { setError('Enter the story title and a title and text for every chapter.'); return }
+    if (!title.trim()) { setError('Enter a story title before saving.'); return }
+    if (chapters.some(item => item.status !== 'draft' && (!item.title.trim() || !item.text.trim()))) { setError('Published chapters need a title and text. Leave unfinished chapters as Draft.'); return }
     if (authorNote && (!authorNote.title.trim() || !authorNote.text.trim())) { setError('Complete the author note or remove it before saving.'); return }
     if (chapters.flatMap(item => item.images).reduce((size, item) => size + (item.file?.size || 0), 0) + (thumbnail?.file?.size || 0) > 25 * 1024 * 1024) { setError('Story pictures must total 25 MB or less per save.'); return }
     setSaving(true)
@@ -183,7 +191,7 @@ const StoryUpload = ({ mode = 'create' }) => {
           })
           images.push({ data, alt: '', explanation: picture.explanation || '' })
         }
-        payload.chapters.push({ id: item.chapterId, title: item.title, text: item.text, images })
+        payload.chapters.push({ id: item.chapterId, status: item.status, title: item.title, text: item.text, images })
       }
       const { data } = editing
         ? await api.put(`/stories/${encodeURIComponent(storyId)}`, payload, { timeout: 180000 })
@@ -197,12 +205,12 @@ const StoryUpload = ({ mode = 'create' }) => {
           setVersion(saved.version)
           setContentRating(saved.contentRating || 'unrated')
           setThumbnail(saved.thumbnail)
-          setChapters(saved.chapters.map(chapter => ({ ...chapter, chapterId: chapter.id, images: chapter.images.map((image, index) => ({ ...image, id: `${chapter.id}-${index}` })) })))
+          setChapters(saved.chapters.map(chapter => ({ ...chapter, status: chapter.status || 'published', chapterId: chapter.id, images: chapter.images.map((image, index) => ({ ...image, id: `${chapter.id}-${index}` })) })))
         } catch {
           setSyncFailed(true)
           setError('Changes were saved, but the editor could not refresh. Reload this page before making more changes.')
         }
-      } else navigate(`/stories/${data.id}`)
+      } else navigate(data.availableChapterCount > 0 ? `/stories/${data.id}` : `/stories/${data.id}/edit`)
     } catch (failure) {
       setError(authError(failure))
     } finally {
@@ -233,7 +241,7 @@ const StoryUpload = ({ mode = 'create' }) => {
     <div className="mb-7 max-w-md">
       <label htmlFor="planned-chapters" className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Planned number of chapters (optional)</label>
       <input id="planned-chapters" type="number" min={chapters.length} max={10000} step={1} value={plannedChapterCount} onChange={event => setPlannedChapterCount(event.target.value)} placeholder="For example, 30 or 100" aria-describedby="planned-chapters-help" className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500 dark:border-blue-900 dark:bg-slate-900 dark:text-slate-100" />
-      <p id="planned-chapters-help" className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{chapters.length} chapters available. Set the intended total to show “Chapter 1 of 30” while letting readers know more chapters are coming. Leave blank if the total is undecided.</p>
+      <p id="planned-chapters-help" className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{publishedCount} published chapters · {chapters.length - publishedCount} drafts. Set the intended total to show “Chapter 1 of 30” while letting readers know more chapters are coming. Leave blank if the total is undecided.</p>
     </div>
     {authorNote && <section aria-labelledby="author-note-heading" className="mb-6 rounded-3xl border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 p-8 shadow-lg shadow-blue-900/5">
       <div className="flex items-center justify-between gap-4"><h2 id="author-note-heading" className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300">Author’s note · Before chapter 1</h2><button type="button" onClick={() => setAuthorNote(null)} aria-label="Remove author note" className="rounded-full p-2 text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-800"><FiTrash2 /></button></div>
@@ -287,6 +295,14 @@ const StoryUpload = ({ mode = 'create' }) => {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Chapter {chapterIndex + 1}</p>
           <button type="button" onClick={deleteChapter} disabled={chapters.length <= 1} title={chapters.length <= 1 ? 'Keep at least one chapter' : 'Delete this chapter'} className="inline-flex items-center gap-2 rounded-full border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"><FiTrash2 aria-hidden="true" />Delete chapter</button>
         </div>
+        <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-slate-800">
+          <label htmlFor="chapter-publication-status" className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Chapter visibility</label>
+          <select id="chapter-publication-status" value={chapter.status || 'published'} onChange={event => changeChapterStatus(event.target.value)} aria-describedby="chapter-publication-help" className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900">
+            <option value="draft">Draft — private</option><option value="published">Published — visible to readers</option>
+          </select>
+          <p id="chapter-publication-help" className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{chapter.status === 'draft' ? 'Only you can open this chapter in the editor. Save rough notes or leave fields blank. Choose Published and save when it is ready.' : 'This chapter is available to readers after you save. Choose Draft to make it private.'}</p>
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Visibility changes take effect when you save. Publish chapters in order.</p>
+        </div>
         <label htmlFor="upload-chapter-title" className="mt-8 text-sm font-semibold text-slate-600 dark:text-slate-300">Chapter title</label>
         <input id="upload-chapter-title" value={chapter.title} onChange={event => updateChapter({ title: event.target.value })} placeholder="Name this chapter" className="mt-2 w-full border-b border-slate-200 dark:border-slate-700 py-3 text-2xl font-bold outline-none placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:border-blue-500" />
         <div className="mt-7 flex items-center justify-between gap-3">
@@ -306,7 +322,7 @@ const StoryUpload = ({ mode = 'create' }) => {
       <div className="grid w-full gap-3 sm:grid-cols-2">
         {chapters.map((item, index) => <button key={item.id} type="button" onClick={() => selectChapter(index)} aria-current={!thumbnailView && chapterIndex === index ? 'step' : undefined} className={`flex min-h-24 min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-4 text-left transition focus-visible:outline-2 focus-visible:outline-blue-700 ${!thumbnailView && chapterIndex === index ? 'border-blue-400 bg-blue-50 dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-blue-300 dark:hover:border-blue-800 hover:bg-blue-50 dark:hover:bg-slate-800'}`}>
           <span className="min-w-0 flex-1">
-            <span className="block text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">Chapter {index + 1}</span>
+            <span className="block text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">Chapter {index + 1} · {item.status === 'draft' ? 'Draft' : 'Published'}</span>
             <span className="mt-1 block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title.trim() || 'Untitled chapter'}</span>
           </span>
           <span className="flex shrink-0 gap-1.5" aria-label={`${item.images.length} of 5 pictures`}>
@@ -320,9 +336,9 @@ const StoryUpload = ({ mode = 'create' }) => {
         {!authorNote && <div className={`absolute right-0 top-full z-20 w-52 pt-2 transition-opacity delay-300 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 ${noteMenu ? 'visible opacity-100' : 'invisible opacity-0'}`}><button type="button" onClick={() => { setAuthorNote({ title: 'A note from the author', text: '' }); setNoteMenu(false); requestAnimationFrame(() => document.getElementById('author-note-heading')?.scrollIntoView({ behavior: 'smooth', block: 'center' })) }} className="w-full rounded-xl border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 px-4 py-3 text-left text-sm font-semibold text-blue-700 dark:text-blue-300 shadow-lg hover:bg-blue-50 dark:hover:bg-slate-800">Add author’s note</button></div>}
       </div>
     </nav>
-    <p ref={saveNoteRef} className="mt-8 flex min-h-12 w-full max-w-lg sm:w-[calc(100%_-_24rem)] items-center text-sm text-slate-500 dark:text-slate-400">{editing ? 'Save updates this story while keeping its comments and reading progress.' : 'Save uploads your pictures and adds the story to the library.'} Unsaved changes are lost if you leave or refresh.</p>
+    <p ref={saveNoteRef} className="mt-8 flex min-h-12 w-full max-w-lg sm:w-[calc(100%_-_24rem)] items-center text-sm text-slate-500 dark:text-slate-400">{editing ? 'Save keeps draft chapters private and updates published chapters while preserving comments and progress.' : 'Save stores your work. Only chapters marked Published appear to readers.'} Unsaved changes are lost if you leave or refresh.</p>
     <div ref={saveActionRef} className="pointer-events-none sticky bottom-6 z-20 -mt-12 flex min-h-12 flex-wrap justify-end gap-3 sm:bottom-8">
-      {editing && <button type="button" disabled={saving} onClick={() => navigate(`/stories/${storyId}`)} className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-lg hover:bg-blue-50 dark:border-blue-900 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-slate-800 disabled:opacity-60"><FiArrowLeft aria-hidden="true" />Exit edit view</button>}
+      {editing && <button type="button" disabled={saving} onClick={() => navigate(publishedCount > 0 ? `/stories/${storyId}` : '/')} className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-lg hover:bg-blue-50 dark:border-blue-900 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-slate-800 disabled:opacity-60"><FiArrowLeft aria-hidden="true" />Exit edit view</button>}
       <button type="button" onClick={saveStory} className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-blue-700 px-6 py-3 font-bold text-white shadow-lg hover:bg-blue-800 disabled:opacity-60"><FiSave aria-hidden="true" />{saving ? 'Saving story…' : editing ? 'Save changes' : 'Save story'}</button>
     </div>
     </fieldset>

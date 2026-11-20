@@ -19,10 +19,11 @@ const commentSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 const chapterSchema = new mongoose.Schema({
+  status: { type: String, enum: ['draft', 'published'], default: 'published' },
   deletedAt: { type: Date, default: null },
-  title: { type: String, required: true, trim: true },
+  title: { type: String, default: '', required: function () { return this.status !== 'draft' }, trim: true, maxlength: 200 },
   number: { type: Number, required: true, min: 1, validate: Number.isInteger },
-  text: { type: String, required: true },
+  text: { type: String, default: '', required: function () { return this.status !== 'draft' }, maxlength: 100000 },
   images: { type: [imageSchema], default: [], validate: { validator: images => images.length <= 5, message: 'A chapter can have up to five images.' } },
   // Read legacy embedded comments for automatic migration; new posts use Comment.
   comments: { type: [commentSchema], default: undefined },
@@ -53,8 +54,8 @@ const storySchema = new mongoose.Schema({
     type: [chapterSchema],
     default: [],
     validate: {
-      validator: chapters => chapters.every((chapter, index) => chapter.number === index + 1),
-      message: 'Chapters must be ordered and numbered consecutively starting at 1.',
+      validator: chapters => chapters.every((chapter, index) => chapter.number === index + 1 && (chapter.status === 'draft' || chapters.slice(0, index).every(previous => previous.status !== 'draft'))),
+      message: 'Chapters must be numbered consecutively, with published chapters before drafts.',
     },
   },
 }, { timestamps: true })

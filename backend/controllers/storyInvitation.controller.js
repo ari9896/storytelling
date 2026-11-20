@@ -1,3 +1,4 @@
+import { hasPublishedChapters } from '../lib/chapterPublication.js'
 import User from '../models/user.model.js'
 import Notification from '../models/notification.model.js'
 import { ensureChapterNotificationIndexes } from '../lib/chapterNotifications.js'
@@ -10,6 +11,7 @@ const recipientFilter = (req, username) => ({ username, _id: { $ne: req.user._id
 export const searchInvitees = async (req, res) => {
   res.set('Cache-Control', 'private, no-store')
   if (!ownsStory(req)) return res.status(403).json({ error: 'Only the author can invite readers to this story.' })
+  if (!hasPublishedChapters(req.ownedStory)) return res.status(400).json({ error: 'Publish the first chapter before inviting readers.' })
   const query = typeof req.query.q === 'string' ? req.query.q.trim().replace(/^@/, '') : ''
   if (query.length < 2) return res.json({ users: [] })
   if (!/^[a-zA-Z0-9]{2,20}$/.test(query)) return res.status(400).json({ error: 'Search using 2–20 letters or numbers.' })
@@ -22,6 +24,7 @@ export const searchInvitees = async (req, res) => {
 export const sendStoryInvitation = async (req, res) => {
   res.set('Cache-Control', 'private, no-store')
   if (!ownsStory(req)) return res.status(403).json({ error: 'Only the author can invite readers to this story.' })
+  if (!hasPublishedChapters(req.ownedStory)) return res.status(400).json({ error: 'Publish the first chapter before inviting readers.' })
   const username = typeof req.body?.username === 'string' ? req.body.username.trim().replace(/^@/, '') : ''
   if (!/^[a-zA-Z0-9]{3,20}$/.test(username)) return res.status(400).json({ error: 'Choose a reader by username.' })
   let reservation

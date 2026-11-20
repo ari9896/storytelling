@@ -4,10 +4,11 @@ import { saveReadingProgress } from '../controllers/readingProgress.controller.j
 import { getDiscussion, postComment, softDeleteComment } from '../controllers/comment.controller.js'
 import express from 'express'
 import { protectRoute, adminRoute, writerRoute, optionalAuth } from '../middleware/auth.middleware.js'
-import { createStory, listStories, getStory, requireStoryOwner, getStoryEditor, updateStory, softDeleteStory } from '../controllers/story.controller.js'
+import { createStory, listStories, listDraftStories, getStory, requireStoryOwner, getStoryEditor, updateStory, softDeleteStory } from '../controllers/story.controller.js'
 
 const router = express.Router()
 router.get('/', optionalAuth, listStories)
+router.get('/drafts', protectRoute, listDraftStories)
 router.get('/:slug/discussion', protectRoute, getDiscussion)
 router.get('/:slug/discussion/public', getDiscussion)
 router.post('/:slug/chapters/:chapterId/comments', protectRoute, postComment)

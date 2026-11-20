@@ -11,7 +11,7 @@ import { notificationLink } from '../../frontend/src/lib/notificationLinks.js'
 
 const id = () => new mongoose.Types.ObjectId()
 const actorId = id(), recipientId = id(), storyId = id()
-const request = () => ({ user: { _id: actorId, role: 'writer' }, ownedStory: { _id: storyId, creatorId: actorId, contentRating: 'everyone' }, query: { q: 'Re' }, body: { username: 'Reader' } })
+const request = () => ({ user: { _id: actorId, role: 'writer' }, ownedStory: { _id: storyId, creatorId: actorId, chapters: [{ _id: id(), status: 'published' }], contentRating: 'everyone' }, query: { q: 'Re' }, body: { username: 'Reader' } })
 const resMock = () => ({ code: 200, set() { return this }, status(code) { this.code = code; return this }, json(data) { this.data = data; return this } })
 let original
 beforeEach(() => {

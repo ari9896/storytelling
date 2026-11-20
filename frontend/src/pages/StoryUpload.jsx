@@ -17,6 +17,7 @@ const StoryUpload = ({ mode = 'create' }) => {
   const [loadError, setLoadError] = useState('')
   const [version, setVersion] = useState(null)
   const { user, loading } = useAuth()
+  const accountId = user?._id
   const navigate = useNavigate()
   const [thumbnail, setThumbnail] = useState(null)
   const [thumbnailView, setThumbnailView] = useState(false)
@@ -68,7 +69,7 @@ const StoryUpload = ({ mode = 'create' }) => {
     return () => previews.forEach(url => URL.revokeObjectURL(url))
   }, [])
   useEffect(() => {
-    if (!editing || !user || loading) return undefined
+    if (!editing || !accountId || loading) return undefined
     let active = true
     api.get(`/stories/${encodeURIComponent(storyId)}/edit`).then(({ data }) => {
       if (!active) return
@@ -84,10 +85,10 @@ const StoryUpload = ({ mode = 'create' }) => {
       setLoadError('')
     }).catch(failure => { if (active) setLoadError(authError(failure)) })
     return () => { active = false }
-  }, [editing, storyId, user, loading])
+  }, [editing, storyId, accountId, loading])
   if (loading) return <main className="mx-auto max-w-5xl py-16" role="status">Checking your account…</main>
   if (!user) return <Navigate to="/login" state={{ returnTo: editing ? `/stories/${storyId}/edit` : '/admin/story-upload' }} replace />
-  if (!editing && user.role !== 'admin') return <Navigate to="/" replace />
+  if (!editing && !['writer', 'admin'].includes(user.role)) return <Navigate to="/" replace />
 
   if (editing && loadError) return <main className="mx-auto max-w-5xl py-16"><p role="alert">{loadError}</p><Link to={`/stories/${storyId}`} className="mt-4 inline-block text-blue-700 dark:text-blue-300 underline">Back to story</Link></main>
   if (editing && loadedId !== storyId) return <main className="mx-auto max-w-5xl py-16" role="status">Loading story editor…</main>
@@ -208,7 +209,7 @@ const StoryUpload = ({ mode = 'create' }) => {
 
   return <main className="mx-auto w-full max-w-5xl py-10">
     <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300 hover:underline"><FiArrowLeft aria-hidden="true" /> Back to stories</Link>
-    <p className="mt-7 text-xs font-bold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Admin studio</p>
+    <p className="mt-7 text-xs font-bold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Story studio</p>
     <h1 className="mt-2 text-3xl font-bold tracking-tight">{editing ? 'Edit story' : 'Story Upload'}</h1>
     <fieldset disabled={saving || syncFailed} className="min-w-0">
     <label htmlFor="upload-story-title" className="mt-7 block text-sm font-semibold text-slate-600 dark:text-slate-300">Story title</label>

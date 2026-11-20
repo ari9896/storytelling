@@ -17,7 +17,7 @@ const PublicUserCard = ({ id, onClose }) => {
     api.get(`/user/public/${encodeURIComponent(id)}`).then(({ data }) => { if (active) setProfile(data) }).catch(failure => { if (active) setError(authError(failure)) })
     return () => { active = false; element.close(); document.body.style.overflow = overflow; previous?.focus() }
   }, [id])
-  return <dialog ref={dialog} onCancel={onClose} onClick={event => { if (event.target === event.currentTarget) onClose() }} aria-labelledby="comment-profile-heading" className="user-details-dialog m-auto w-[calc(100%_-_2rem)] max-w-sm rounded-3xl border border-blue-100 bg-white p-8 text-center text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+  return <dialog ref={dialog} onCancel={onClose} onClick={event => { if (event.target !== event.currentTarget) return; const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose() }} aria-labelledby="comment-profile-heading" className="user-details-dialog m-auto w-[calc(100%_-_2rem)] max-w-sm rounded-3xl border border-blue-100 bg-white p-8 text-center text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
     <button autoFocus type="button" onClick={onClose} aria-label="Close user profile" className="absolute right-4 top-4 rounded-full p-2 text-slate-500 hover:bg-blue-50 dark:text-slate-400 dark:hover:bg-slate-800"><FiX /></button>
     <h2 id="comment-profile-heading" className="mb-6 text-sm font-semibold text-slate-500 dark:text-slate-400">Reader profile</h2>
     {!profile && !error && <p role="status">Loading profile…</p>}

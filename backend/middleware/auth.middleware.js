@@ -47,3 +47,8 @@ export const optionalAuth = async (req, res, next) => {
     return next()
   } catch { return res.status(500).json({ error: 'Unable to check reading access.' }) }
 }
+
+export const writerRoute = (req, res, next) => {
+  if (!['writer', 'admin'].includes(req.user?.role)) return res.status(403).json({ message: 'Writer or admin access required to upload stories.' })
+  return next()
+}

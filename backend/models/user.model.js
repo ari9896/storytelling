@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema({
   signupNoticeAt: { type: Date, default: null, select: false, index: true },
   usersPageSeenAt: { type: Date, default: null, select: false },
   signupIp: { type: String, default: null, select: false },
-  role: { type: String, enum: ['reader', 'admin'], default: 'reader' },
+  role: { type: String, enum: ['reader', 'writer', 'admin'], default: 'reader' },
   profilePic: { type: String, default: null },
   profilePicPublicId: { type: String, default: null },
   profilePicHistory: { type: [profilePhotoSchema], default: [], select: false },

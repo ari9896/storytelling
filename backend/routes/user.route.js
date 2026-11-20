@@ -1,4 +1,4 @@
-import { listUsers, getUserDetails, setCommentRestriction, unreadSignups, visitUsersPage } from '../controllers/adminUser.controller.js'
+import { listUsers, getUserDetails, setUserRole, setCommentRestriction, unreadSignups, visitUsersPage } from '../controllers/adminUser.controller.js'
 import { uploadProfilePic } from '../controllers/profile.controller.js'
 import express from 'express'
 import { signup, login, logout, getProfile, updateUsername, getPublicProfile } from '../controllers/user.controller.js'
@@ -17,6 +17,7 @@ router.get('/admin/users', protectRoute, adminRoute, listUsers)
 router.get('/admin/users/unread', protectRoute, adminRoute, unreadSignups)
 router.post('/admin/users/visit', protectRoute, adminRoute, visitUsersPage)
 router.get('/admin/users/:id', protectRoute, adminRoute, getUserDetails)
+router.patch('/admin/users/:id/role', protectRoute, adminRoute, setUserRole)
 router.patch('/admin/users/:id/comment-restriction', protectRoute, adminRoute, setCommentRestriction)
 
 export default router

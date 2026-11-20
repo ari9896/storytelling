@@ -17,6 +17,25 @@ export const AuthProvider = ({ children }) => {
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
+  const accountId = user?._id
+  useEffect(() => {
+    if (!accountId) return undefined
+    let active = true
+    let pending = false
+    const refresh = async () => {
+      if (pending || document.hidden) return
+      pending = true
+      try {
+        const { data } = await api.get('/user/profile')
+        if (active) setUser(current => current?._id === accountId && data._id === accountId && current.role !== data.role ? { ...current, role: data.role } : current)
+      } catch (failure) {
+        if (active && failure.response?.status === 401) setUser(current => current?._id === accountId ? null : current)
+      } finally { pending = false }
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { active = false; window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+  }, [accountId])
   const login = async (credentials) => {
     const { data } = await api.post('/user/login', credentials)
     setUser(data)

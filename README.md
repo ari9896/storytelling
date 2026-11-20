@@ -29,3 +29,12 @@ To connect MongoDB later, copy `.env.example` to `.env` and set `MONGO_URI`. The
 Signed-in readers can use React below a comment or reply to choose an emoji. Counts are visible to everyone; the current user's choice is highlighted. Selecting another emoji replaces the old choice, and clicking the selected emoji removes it. Reactions persist in the comment's `reactions` array with one entry per user, updated atomically. Discussion responses expose counts and the current user's choice. Hovering over a reaction shows up to ten public profiles; on touchscreens, tap its count. View more opens a scrollable list that loads 50 profiles at a time. Names open the existing user cards. The participant endpoint returns only profile IDs, current usernames, and current pictures, and checks chapter access and comment visibility.
 
 Deleted comments cannot receive reactions. Comment restrictions also prevent adding or changing reactions (removing one's own remains allowed). Chapter access is checked on the server, and reactions never satisfy the comment requirement for unlocking chapters. Existing comments work without a migration. Run `node --test backend/lib/commentReactions.test.js` for the offline reaction checks.
+
+
+### Reader, writer, and admin roles
+
+New signups default to reader; clients cannot choose a privileged signup role. Admins can open Users, choose a user, select Reader or Writer under Story upload access, and save. User cards update immediately. Existing administrator accounts keep their role in this control.
+
+Writers and admins can create stories through the Upload stories button. Editing and soft deletion remain limited to the story's creator. Writer status does not grant access to user administration, feedback administration, or comment moderation, and writers still need to comment to unlock other authors' chapters. Returning to a browser tab refreshes the signed-in user's role; a page refresh also picks up role changes. Demoting a writer removes permission to upload new stories while preserving ownership and editing of their existing stories.
+
+Run `node --test backend/lib/userRoles.test.js` for offline role and ownership checks.

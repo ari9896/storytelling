@@ -42,15 +42,15 @@ const Users = () => {
   const ready = result?.page === page
   return <main className="mx-auto max-w-6xl py-10">
     <p className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300">Administration</p><h1 className="mt-2 text-3xl font-bold">Users</h1>
-    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{result ? `${result.total} registered users. ` : ''}Select a user to view their profile history and story participation.</p>
+    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{result ? `${result.total} registered users. ` : ''}Select a user to manage writer access, view their profile history, and see story participation.</p>
     {error && <p role="alert" className="mt-5 text-red-700 dark:text-red-300">{error}</p>}
     {!ready && !error && <p role="status" className="mt-5">Loading users…</p>}
     {ready && <><div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{result.users.map(person => <button key={person._id} type="button" onClick={() => setSelected(person._id)} className={`${newUsers.includes(person._id) ? 'new-user-card ' : ''}flex min-w-0 flex-col items-center rounded-3xl border border-blue-100 bg-white p-6 text-center shadow-sm transition hover:-translate-y-1 hover:border-blue-400 focus-visible:outline-2 focus-visible:outline-blue-600 dark:border-slate-700 dark:bg-slate-900`}>
       {person.profilePic ? <img src={person.profilePic} alt="" className="h-24 w-24 rounded-full object-cover" /> : <span className="flex h-24 w-24 items-center justify-center rounded-full bg-blue-100 text-4xl text-blue-700 dark:bg-blue-950 dark:text-blue-300"><FiUser aria-hidden="true" /></span>}
-      <span className="mt-4 w-full truncate font-bold">{person.username}</span><span className="mt-2 w-full break-all text-sm text-slate-500 dark:text-slate-400">{person.email}</span>
+      <span className="mt-4 w-full truncate font-bold">{person.username}</span><span className="mt-2 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold capitalize text-blue-800 dark:bg-blue-950 dark:text-blue-200">{person.role}</span><span className="mt-2 w-full break-all text-sm text-slate-500 dark:text-slate-400">{person.email}</span>
     </button>)}</div>{!result.users.length && <p className="mt-7">No users found.</p>}</>}
     <div className="mt-7 flex items-center justify-between gap-3"><button disabled={page === 1} onClick={() => setPage(current => current - 1)} className="rounded-full border border-blue-200 px-5 py-2 text-sm disabled:opacity-40 dark:border-slate-700">Previous</button><p className="text-sm">Page {page}{result ? ` of ${result.pages}` : ''}</p><button disabled={!ready || page >= result.pages} onClick={() => setPage(current => current + 1)} className="rounded-full border border-blue-200 px-5 py-2 text-sm disabled:opacity-40 dark:border-slate-700">Next</button></div>
-    {selected && <UserDetails key={selected} id={selected} onClose={() => setSelected(null)} />}
+    {selected && <UserDetails key={selected} id={selected} onRoleSaved={updated => setResult(current => current ? { ...current, users: current.users.map(person => person._id === updated._id ? { ...person, role: updated.role } : person) } : current)} onClose={() => setSelected(null)} />}
   </main>
 }
 export default Users

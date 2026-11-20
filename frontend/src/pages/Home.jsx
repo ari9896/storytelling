@@ -53,7 +53,7 @@ const Home = () => {
         ))}
       </div>
     </section>
-    {!loading && user?.role === 'admin' && <>
+    {!loading && ['writer', 'admin'].includes(user?.role) && <>
       <Link to="/admin/story-upload" className="fixed bottom-6 right-5 z-20 inline-flex items-center gap-2 rounded-full border border-white/30 bg-blue-700 px-6 py-4 text-sm font-bold text-white shadow-xl shadow-blue-950/25 transition hover:-translate-y-1 hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700 sm:bottom-8 sm:right-8">
         <FiPlusCircle aria-hidden="true" className="text-lg" /> Upload stories
       </Link>

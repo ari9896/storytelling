@@ -77,3 +77,20 @@ export const visitUsersPage = async (req, res) => {
     return res.json({ newUserIds: users.map(user => String(user._id)) })
   } catch { return res.status(500).json({ error: 'Unable to acknowledge new users.' }) }
 }
+
+export const setUserRole = async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required.' })
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid user ID.' })
+  const { role } = req.body || {}
+  if (!['reader', 'writer'].includes(role)) return res.status(400).json({ error: 'Choose reader or writer.' })
+  try {
+    const user = await User.findOneAndUpdate({ _id: req.params.id, role: { $in: ['reader', 'writer', 'user'] } },
+      { $set: { role } }, { new: true, runValidators: true }).select('_id role')
+    if (!user) {
+      const exists = await User.exists({ _id: req.params.id })
+      return res.status(exists ? 409 : 404).json({ error: exists ? 'Administrator roles cannot be changed here.' : 'User not found.' })
+    }
+    res.set('Cache-Control', 'private, no-store')
+    return res.json({ user: { _id: String(user._id), role: user.role } })
+  } catch { return res.status(500).json({ error: 'Unable to update this user’s role. Please try again.' }) }
+}

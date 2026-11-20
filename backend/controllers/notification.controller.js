@@ -12,15 +12,15 @@ export const listNotifications = async (req, res) => {
       { $match: { 'story.deletedAt': null } },
       { $lookup: { from: 'comments', localField: 'commentId', foreignField: '_id', as: 'comment' } },
       { $unwind: { path: '$comment', preserveNullAndEmptyArrays: true } },
-      { $match: { $or: [{ type: 'new_chapter' }, { $and: [{ 'comment._id': { $exists: true } }, { 'comment.deletedAt': null }] }] } },
+      { $match: { $or: [{ type: { $in: ['new_chapter', 'story_invite'] } }, { $and: [{ 'comment._id': { $exists: true } }, { 'comment.deletedAt': null }] }] } },
       { $set: { chapter: { $arrayElemAt: [{ $filter: { input: '$story.chapters', as: 'chapter', cond: { $eq: ['$$chapter._id', '$chapterId'] } } }, 0] } } },
-      { $match: { 'chapter._id': { $exists: true } } },
+      { $match: { $or: [{ type: 'story_invite' }, { 'chapter._id': { $exists: true } }] } },
       { $lookup: { from: 'users', localField: 'actor', foreignField: '_id', as: 'actorUser' } },
       { $facet: {
         unread: [{ $match: { readAt: null } }, { $count: 'count' }],
         items: [{ $limit: 30 }, { $project: {
           type: 1, chapterNumber: '$chapter.number', _id: 0, id: { $toString: '$_id' }, actorName: { $ifNull: [{ $arrayElemAt: ['$actorUser.username', 0] }, 'Someone'] },
-          storyTitle: '$story.title', slug: '$story.slug', chapterId: { $toString: '$chapterId' },
+          storyTitle: '$story.title', contentRating: '$story.contentRating', slug: '$story.slug', chapterId: { $toString: '$chapterId' },
           commentId: { $toString: '$commentId' }, readAt: 1, createdAt: 1,
         } }],
       } },

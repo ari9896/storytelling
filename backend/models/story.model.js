@@ -1,5 +1,7 @@
 import mongoose from 'mongoose'
 
+export const STORY_RATINGS = ['unrated', 'everyone', 'teen', 'mature']
+
 const imageSchema = new mongoose.Schema({
   url: { type: String, required: true, trim: true },
   alt: { type: String, default: '' },
@@ -33,6 +35,7 @@ const storySchema = new mongoose.Schema({
   deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   creatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, immutable: true, index: true },
   title: { type: String, required: true, trim: true },
+  contentRating: { type: String, enum: STORY_RATINGS, default: 'unrated' },
   slug: { type: String, required: true, unique: true, trim: true },
   plannedChapterCount: {
     type: Number, default: null, min: 1, max: 10000,

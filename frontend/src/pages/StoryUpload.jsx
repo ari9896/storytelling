@@ -24,6 +24,7 @@ const StoryUpload = ({ mode = 'create' }) => {
   const thumbnailInput = useRef(null)
   const [plannedChapterCount, setPlannedChapterCount] = useState('')
   const [title, setTitle] = useState('')
+  const [contentRating, setContentRating] = useState('unrated')
   const [authorNote, setAuthorNote] = useState(null)
   const [noteMenu, setNoteMenu] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -74,6 +75,7 @@ const StoryUpload = ({ mode = 'create' }) => {
     api.get(`/stories/${encodeURIComponent(storyId)}/edit`).then(({ data }) => {
       if (!active) return
       setTitle(data.title)
+      setContentRating(data.contentRating || 'unrated')
       setPlannedChapterCount(data.plannedChapterCount == null ? '' : String(data.plannedChapterCount))
       setThumbnail(data.thumbnail)
       setAuthorNote(data.authorNote)
@@ -159,7 +161,7 @@ const StoryUpload = ({ mode = 'create' }) => {
     setSaving(true)
     setError('')
     try {
-      const payload = { plannedChapterCount: plannedChapterCount === '' ? null : Number(plannedChapterCount), title, authorNote, version, chapters: [], thumbnail: null }
+      const payload = { contentRating, plannedChapterCount: plannedChapterCount === '' ? null : Number(plannedChapterCount), title, authorNote, version, chapters: [], thumbnail: null }
       if (thumbnail?.file) {
         const data = await new Promise((resolve, reject) => {
           const reader = new FileReader()
@@ -193,6 +195,7 @@ const StoryUpload = ({ mode = 'create' }) => {
         try {
           const { data: saved } = await api.get(`/stories/${encodeURIComponent(storyId)}/edit`)
           setVersion(saved.version)
+          setContentRating(saved.contentRating || 'unrated')
           setThumbnail(saved.thumbnail)
           setChapters(saved.chapters.map(chapter => ({ ...chapter, chapterId: chapter.id, images: chapter.images.map((image, index) => ({ ...image, id: `${chapter.id}-${index}` })) })))
         } catch {
@@ -215,6 +218,18 @@ const StoryUpload = ({ mode = 'create' }) => {
     <label htmlFor="upload-story-title" className="mt-7 block text-sm font-semibold text-slate-600 dark:text-slate-300">Story title</label>
     <input id="upload-story-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="Give your story a title" className="mb-6 mt-2 w-full rounded-xl border border-blue-200 dark:border-blue-900 bg-white/70 dark:bg-slate-900/70 px-4 py-3 text-2xl font-bold outline-none placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
 
+    <div className="mb-7 max-w-xl">
+      <label htmlFor="story-content-rating" className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Content rating</label>
+      <select id="story-content-rating" value={contentRating} onChange={event => setContentRating(event.target.value)} aria-describedby="story-rating-help" className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500 dark:border-blue-900 dark:bg-slate-900 dark:text-slate-100">
+        <option value="unrated">Unrated</option><option value="everyone">Everyone</option><option value="teen">Teen</option><option value="mature">Mature</option>
+      </select>
+      <p id="story-rating-help" className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{{
+        unrated: 'Choose a rating based on the strongest content in the entire story. It will appear in the library and on the reading page.',
+        everyone: 'For a broad audience, without graphic violence or explicit sexual content.',
+        teen: 'Stronger themes, non-graphic violence, or some strong language.',
+        mature: 'Graphic violence, explicit sexual content, or other adult themes.',
+      }[contentRating]}</p>
+    </div>
     <div className="mb-7 max-w-md">
       <label htmlFor="planned-chapters" className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Planned number of chapters (optional)</label>
       <input id="planned-chapters" type="number" min={chapters.length} max={10000} step={1} value={plannedChapterCount} onChange={event => setPlannedChapterCount(event.target.value)} placeholder="For example, 30 or 100" aria-describedby="planned-chapters-help" className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500 dark:border-blue-900 dark:bg-slate-900 dark:text-slate-100" />

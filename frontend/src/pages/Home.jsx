@@ -1,3 +1,4 @@
+import StoryRating from '../components/StoryRating.jsx'
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/auth.js'
@@ -6,14 +7,21 @@ import { Link } from 'react-router-dom'
 
 const Home = () => {
   const { user, loading } = useAuth()
-  const [savedStories, setSavedStories] = useState([])
-  const [libraryError, setLibraryError] = useState('')
+  const [library, setLibrary] = useState(null)
+  const [libraryFailure, setLibraryFailure] = useState(null)
+  const accountId = user?._id || 'guest'
+  const showMatureStories = user?.showMatureStories === true
+  const libraryKey = `${accountId}:${showMatureStories}`
+  const libraryReady = !loading && library?.key === libraryKey
+  const savedStories = libraryReady ? library.stories : []
+  const libraryError = libraryFailure?.key === libraryKey ? libraryFailure.message : ''
   useEffect(() => {
+    if (loading) return undefined
     let active = true
-    api.get('/stories').then(({ data }) => { if (active) setSavedStories(data) })
-      .catch(() => { if (active) setLibraryError('Stories could not be loaded. Please refresh to try again.') })
+    api.get('/stories').then(({ data }) => { if (active) { setLibrary({ key: libraryKey, stories: data }); setLibraryFailure(null) } })
+      .catch(() => { if (active) setLibraryFailure({ key: libraryKey, message: 'Stories could not be loaded. Please refresh to try again.' }) })
     return () => { active = false }
-  }, [])
+  }, [loading, libraryKey])
   return (
   <main className="mx-auto w-full max-w-6xl pb-32 pt-10">
     <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-blue-800 via-blue-700 to-sky-600 px-7 py-12 text-white shadow-xl shadow-blue-900/15 sm:px-12 sm:py-16">
@@ -34,7 +42,8 @@ const Home = () => {
         <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Stories</h2>
       </div>
       {libraryError && <p role="status" className="mb-4 text-sm text-slate-600 dark:text-slate-300">{libraryError}</p>}
-      {!savedStories.length && !libraryError && <p className="mb-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 p-6 text-slate-600 dark:text-slate-300">No stories yet. New stories will appear here when they’re uploaded.</p>}
+      {!libraryReady && !libraryError && <p role="status" className="mb-4 text-sm text-slate-600 dark:text-slate-300">Loading stories…</p>}
+      {libraryReady && !savedStories.length && !libraryError && <p className="mb-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 p-6 text-slate-600 dark:text-slate-300">No stories yet. New stories will appear here when they’re uploaded.</p>}
       <div className="grid gap-5 md:grid-cols-2">
         {savedStories.map((story) => (
           <Link key={story.id} to={`/stories/${story.id}`} className="group overflow-hidden rounded-3xl border border-white dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg shadow-blue-900/5 transition hover:-translate-y-1 hover:shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
@@ -45,7 +54,7 @@ const Home = () => {
               </div>
             )}
             <div className="p-6">
-              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{story.title}</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{story.title}</h3><StoryRating value={story.contentRating} /></div>
               <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{story.description}</p>
               <span className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-blue-700 dark:text-blue-300 group-hover:underline">Read story <FiArrowRight aria-hidden="true" /></span>
             </div>

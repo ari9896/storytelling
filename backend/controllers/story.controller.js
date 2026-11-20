@@ -6,12 +6,13 @@ import { loadStory } from '../lib/storyRepository.js'
 import { canReadChapter } from '../lib/storyAccess.js'
 import { retiredStorySlugs } from '../lib/retiredStories.js'
 import { randomUUID } from 'node:crypto'
-import Story from '../models/story.model.js'
+import Story, { STORY_RATINGS } from '../models/story.model.js'
 import cloudinary from '../lib/cloudinary.js'
 
 const validText = (value, max) => typeof value === 'string' && value.trim().length > 0 && value.length <= max
 export const validateStoryInput = (body, allowExistingImages = false) => {
   if (!body || !validText(body.title, 200)) return 'Enter a story title (up to 200 characters).'
+  if (body.contentRating !== undefined && !STORY_RATINGS.includes(body.contentRating)) return 'Choose Unrated, Everyone, Teen, or Mature for the content rating.'
   if (!Array.isArray(body.chapters) || !body.chapters.length || body.chapters.length > 50) return 'Add between 1 and 50 chapters.'
   if (body.plannedChapterCount != null && (!Number.isInteger(body.plannedChapterCount) || body.plannedChapterCount < body.chapters.length || body.plannedChapterCount > 10000)) return 'Planned chapter count must be a whole number between the available chapter count and 10,000.'
   if (body.authorNote != null && (!validText(body.authorNote.title, 200) || !validText(body.authorNote.text, 100000))) return 'Complete the author note title and text.'
@@ -42,6 +43,7 @@ export const validateStoryInput = (body, allowExistingImages = false) => {
 }
 
 export const readerStory = (story, user) => ({
+  contentRating: story.contentRating || 'unrated',
   creatorId: story.creatorId ? String(story.creatorId) : null,
   id: story.slug, title: story.title, description: story.description,
   plannedChapterCount: story.plannedChapterCount || null, availableChapterCount: story.chapters.length,
@@ -80,6 +82,7 @@ export const createStory = async (req, res) => {
     const story = await Story.create({
       creatorId: req.user._id,
       title: req.body.title.trim(), slug,
+      contentRating: req.body.contentRating ?? 'unrated',
       plannedChapterCount: req.body.plannedChapterCount ?? null,
       description: chapters[0].text.slice(0, 180),
       thumbnail,
@@ -94,10 +97,11 @@ export const createStory = async (req, res) => {
   }
 }
 
-export const listStories = async (_req, res) => {
+export const listStories = async (req, res) => {
+  res.set('Cache-Control', 'private, no-store')
   try {
-    const stories = await Story.find({ deletedAt: null, slug: { $nin: retiredStorySlugs } }).select('title slug description thumbnail').sort({ createdAt: -1 }).lean()
-    return res.json(stories.map(story => ({ id: story.slug, title: story.title, description: story.description, coverImage: story.thumbnail?.url || null, coverAlt: story.thumbnail?.alt || '', label: 'Story' })))
+    const stories = await Story.find({ deletedAt: null, slug: { $nin: retiredStorySlugs }, ...(req.user?.showMatureStories === true ? {} : { contentRating: { $ne: 'mature' } }) }).select('title slug description thumbnail contentRating').sort({ createdAt: -1 }).lean()
+    return res.json(stories.map(story => ({ id: story.slug, title: story.title, contentRating: story.contentRating || 'unrated', description: story.description, coverImage: story.thumbnail?.url || null, coverAlt: story.thumbnail?.alt || '', label: 'Story' })))
   } catch { return res.status(500).json({ error: 'Unable to load saved stories.' }) }
 }
 
@@ -124,7 +128,7 @@ export const requireStoryOwner = async (req, res, next) => {
 
 export const getStoryEditor = (req, res) => {
   const story = req.ownedStory
-  return res.json({ id: story.slug, version: story.__v, title: story.title, plannedChapterCount: story.plannedChapterCount || null,
+  return res.json({ id: story.slug, version: story.__v, title: story.title, contentRating: story.contentRating || 'unrated', plannedChapterCount: story.plannedChapterCount || null,
     thumbnail: story.thumbnail || null,
     authorNote: story.authorNote || (story.storytellerNote ? { title: 'A note from the storyteller', text: story.storytellerNote } : null),
     chapters: story.chapters.map(chapter => ({ id: String(chapter._id), title: chapter.title, text: chapter.text,
@@ -170,7 +174,7 @@ export const updateStory = async (req, res) => {
       }
       chapters.push({ title: chapter.title.trim(), text: chapter.text, images, number: index + 1 })
     }
-    const fields = { plannedChapterCount: req.body.plannedChapterCount === undefined ? story.plannedChapterCount : req.body.plannedChapterCount, title: req.body.title.trim(), authorNote: req.body.authorNote || null, storytellerNote: '', description: chapters[0].text.slice(0, 180), thumbnail }
+    const fields = { contentRating: req.body.contentRating === undefined ? (story.contentRating || 'unrated') : req.body.contentRating, plannedChapterCount: req.body.plannedChapterCount === undefined ? story.plannedChapterCount : req.body.plannedChapterCount, title: req.body.title.trim(), authorNote: req.body.authorNote || null, storytellerNote: '', description: chapters[0].text.slice(0, 180), thumbnail }
     const candidate = new Story({ ...story.toObject(), ...fields, chapters: chapters.map((chapter, index) => ({ ...(existingById.get(req.body.chapters[index].id)?.toObject() || {}), ...chapter })) })
     await candidate.validate()
     // Merge editor fields into the current database chapters, preserving comments posted while editing.

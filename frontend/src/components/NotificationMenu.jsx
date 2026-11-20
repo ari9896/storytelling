@@ -1,3 +1,4 @@
+import { notificationLink } from '../lib/notificationLinks.js'
 import { useViewportPanel } from '../lib/useViewportPanel.js'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -49,7 +50,7 @@ const NotificationMenu = () => {
         setData(current => ({ ...current, unreadCount: Math.max(0, current.unreadCount - 1), items: current.items.map(row => row.id === item.id ? { ...row, readAt: read.readAt } : row) }))
       }
       setOpen(false)
-      navigate(`/stories/${encodeURIComponent(item.slug)}?chapter=${item.chapterId}${item.type === 'new_chapter' ? '' : `#comment-${item.commentId}`}`)
+      navigate(notificationLink(item))
     } catch (failure) { setError(authError(failure)) }
     finally { setBusy(false) }
   }
@@ -72,10 +73,10 @@ const NotificationMenu = () => {
       {count > 0 && <button type="button" disabled={busy} onClick={markAll} className="mx-4 mb-3 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:underline disabled:opacity-50">Mark all as read</button>}
       {error && <p role="alert" className="px-4 pb-4 text-sm text-red-700 dark:text-red-300">{error}</p>}
       {!data && !error && <p role="status" className="p-4 text-sm text-slate-500 dark:text-slate-400">Loading notifications…</p>}
-      {data?.items.length === 0 && <p className="p-4 text-sm text-slate-500 dark:text-slate-400">No notifications yet. Replies and new chapters for stories you’ve commented on will appear here.</p>}
+      {data?.items.length === 0 && <p className="p-4 text-sm text-slate-500 dark:text-slate-400">No notifications yet. Story invitations, replies, and new chapters will appear here.</p>}
       <ul className="max-h-96 overflow-y-auto">{data?.items.map(item => <li key={item.id}><button type="button" disabled={busy} onClick={() => openNotification(item)} className={`w-full border-t border-blue-100 dark:border-slate-700 p-4 text-left text-sm hover:bg-blue-100 dark:hover:bg-blue-950 disabled:opacity-60 ${item.readAt ? 'bg-white dark:bg-slate-900' : 'bg-blue-50 dark:bg-slate-800'}`}>
-        <span className="block text-slate-800 dark:text-slate-200">{item.type === 'new_chapter' ? <>Chapter {item.chapterNumber} of <strong>{item.storyTitle}</strong> has been added. Give it a read!</> : <><strong>{item.actorName}</strong> replied to your comment</>}{!item.readAt && <span className="ml-2 inline-block h-2 w-2 rounded-full bg-red-600" aria-label="Unread" />}</span>
-        <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">{item.storyTitle}</span>
+        <span className="block text-slate-800 dark:text-slate-200">{item.type === 'story_invite' ? <><strong>{item.actorName}</strong> invited you to read <strong>{item.storyTitle}</strong>.</> : item.type === 'new_chapter' ? <>Chapter {item.chapterNumber} of <strong>{item.storyTitle}</strong> has been added. Give it a read!</> : <><strong>{item.actorName}</strong> replied to your comment</>}{!item.readAt && <span className="ml-2 inline-block h-2 w-2 rounded-full bg-red-600" aria-label="Unread" />}</span>
+        <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">{item.storyTitle}{item.type === 'story_invite' && item.contentRating === 'mature' ? ' · Mature' : ''}</span>
         <time dateTime={item.createdAt} className="mt-1 block text-xs text-slate-400 dark:text-slate-400">{new Date(item.createdAt).toLocaleString()}</time>
       </button></li>)}</ul>
     </section>}

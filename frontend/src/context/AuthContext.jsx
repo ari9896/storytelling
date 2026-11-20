@@ -57,6 +57,18 @@ export const AuthProvider = ({ children }) => {
     setUser(current => current?._id === currentId ? { ...current, username: data.username } : current)
     return data.username
   }
+  const updateShowMatureStories = async showMatureStories => {
+    const currentId = user?._id
+    const { data } = await api.patch('/user/preferences', { showMatureStories })
+    setUser(current => current?._id === currentId ? { ...current, showMatureStories: data.showMatureStories } : current)
+    return data.showMatureStories
+  }
+  const updateAllowStoryInvitations = async allowStoryInvitations => {
+    const currentId = user?._id
+    const { data } = await api.patch('/user/preferences', { allowStoryInvitations })
+    setUser(current => current?._id === currentId ? { ...current, allowStoryInvitations: data.allowStoryInvitations } : current)
+    return data.allowStoryInvitations
+  }
   const logout = async () => {
     await api.post('/user/logout')
     setUser(null)
@@ -67,7 +79,7 @@ export const AuthProvider = ({ children }) => {
     setPrompt({ reason, returnTo: location.pathname + location.search + location.hash })
     return false
   }
-  return <AuthContext.Provider value={{ user, loading, login, signup, logout, requireAccount, uploadProfilePic, updateUsername }}>
+  return <AuthContext.Provider value={{ user, loading, login, signup, logout, requireAccount, uploadProfilePic, updateUsername, updateShowMatureStories, updateAllowStoryInvitations }}>
     {children}
     {prompt && <SignupPrompt {...prompt} onClose={() => setPrompt(null)} />}
   </AuthContext.Provider>

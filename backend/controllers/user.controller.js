@@ -11,6 +11,8 @@ const publicUser = (user) => ({
   username: user.username,
   email: user.email,
   role: user.role === 'user' ? 'reader' : user.role,
+  showMatureStories: user.showMatureStories === true,
+  allowStoryInvitations: user.allowStoryInvitations !== false,
   profilePic: user.profilePic,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
@@ -109,4 +111,22 @@ export const getPublicProfile = async (req, res) => {
     if (!user) return res.status(404).json({ error: 'This profile is no longer available.' })
     return res.json({ id: String(user._id), username: user.username, profilePic: user.profilePic || null, createdAt: user.createdAt })
   } catch { return res.status(500).json({ error: 'Unable to load this profile.' }) }
+}
+
+export const updatePreferences = async (req, res) => {
+  if (!req.user?._id) return res.status(401).json({ error: 'Sign in to change your preferences.' })
+  const updates = {}
+  for (const key of ['showMatureStories', 'allowStoryInvitations']) {
+    if (req.body && Object.hasOwn(req.body, key)) {
+      if (typeof req.body[key] !== 'boolean') return res.status(400).json({ error: 'Choose on or off for your preference.' })
+      updates[key] = req.body[key]
+    }
+  }
+  if (!Object.keys(updates).length) return res.status(400).json({ error: 'Choose a preference to update.' })
+  try {
+    const user = await User.findByIdAndUpdate(req.user._id, { $set: updates }, { new: true, runValidators: true }).select(Object.keys(updates).join(' '))
+    if (!user) return res.status(404).json({ error: 'Account no longer exists.' })
+    res.set('Cache-Control', 'private, no-store')
+    return res.json(Object.fromEntries(Object.keys(updates).map(key => [key, key === 'allowStoryInvitations' ? user[key] !== false : user[key] === true])))
+  } catch { return res.status(500).json({ error: 'Unable to save your preference. Please try again.' }) }
 }

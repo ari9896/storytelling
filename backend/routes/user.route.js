@@ -1,7 +1,7 @@
 import { listUsers, getUserDetails, setUserRole, setCommentRestriction, unreadSignups, visitUsersPage } from '../controllers/adminUser.controller.js'
 import { uploadProfilePic } from '../controllers/profile.controller.js'
 import express from 'express'
-import { signup, login, logout, getProfile, updateUsername, getPublicProfile } from '../controllers/user.controller.js'
+import { signup, login, logout, getProfile, updateUsername, getPublicProfile, updatePreferences } from '../controllers/user.controller.js'
 import { protectRoute, adminRoute } from '../middleware/auth.middleware.js'
 
 const router = express.Router()
@@ -11,6 +11,7 @@ router.post('/login', login)
 router.post('/logout', logout)
 router.post('/profile-pic', protectRoute, express.json({ limit: '8mb' }), uploadProfilePic)
 router.patch('/username', protectRoute, updateUsername)
+router.patch('/preferences', protectRoute, updatePreferences)
 router.get('/profile', protectRoute, getProfile)
 router.get('/public/:id', getPublicProfile)
 router.get('/admin/users', protectRoute, adminRoute, listUsers)

@@ -7,11 +7,13 @@ import { useEffect, useRef, useState } from 'react'
 import { FiCamera, FiImage, FiUser, FiX, FiEdit2 } from 'react-icons/fi'
 
 const ProfileMenu = () => {
-  const { user, loading, logout, requireAccount, uploadProfilePic, updateUsername } = useAuth()
+  const { user, loading, logout, requireAccount, uploadProfilePic, updateUsername, updateShowMatureStories, updateAllowStoryInvitations } = useAuth()
   const { prepareImage, cropDialog } = useImageCrop()
   const [editingUsername, setEditingUsername] = useState(false)
   const [usernameDraft, setUsernameDraft] = useState('')
   const [savingUsername, setSavingUsername] = useState(false)
+  const [savingPreference, setSavingPreference] = useState(false)
+  const preferenceSaveRef = useRef(false)
   const usernameSaveRef = useRef(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [open, setOpen] = useState(false)
@@ -74,6 +76,29 @@ const ProfileMenu = () => {
     }
   }
 
+  const toggleMatureStories = async () => {
+    if (!requireAccount('Sign up or log in to change your story preferences.')) { setOpen(false); return }
+    if (preferenceSaveRef.current) return
+    preferenceSaveRef.current = true
+    setSavingPreference(true); setError(''); setSuccess('')
+    try {
+      const enabled = await updateShowMatureStories(user.showMatureStories !== true)
+      setSuccess(enabled ? 'Mature stories are now shown in your library.' : 'Mature stories are now hidden from your library.')
+    } catch (failure) { setError(authError(failure)) }
+    finally { preferenceSaveRef.current = false; setSavingPreference(false) }
+  }
+
+  const toggleStoryInvitations = async () => {
+    if (preferenceSaveRef.current) return
+    preferenceSaveRef.current = true
+    setSavingPreference(true); setError(''); setSuccess('')
+    try {
+      const enabled = await updateAllowStoryInvitations(user.allowStoryInvitations === false)
+      setSuccess(enabled ? 'Story invitations are on.' : 'Story invitations are off.')
+    } catch (failure) { setError(authError(failure)) }
+    finally { preferenceSaveRef.current = false; setSavingPreference(false) }
+  }
+
   const saveUsername = async event => {
     event.preventDefault()
     if (usernameSaveRef.current) return
@@ -113,7 +138,7 @@ const ProfileMenu = () => {
         </div>
 
         <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={choosePhoto} className="sr-only" aria-label="Choose a profile picture" />
-        <button type="button" disabled={loading || uploading || savingUsername} onClick={() => { if (requireAccount('Sign up to choose a profile picture.')) inputRef.current?.click(); else setOpen(false) }} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
+        <button type="button" disabled={loading || uploading || savingUsername || savingPreference} onClick={() => { if (requireAccount('Sign up to choose a profile picture.')) inputRef.current?.click(); else setOpen(false) }} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
           <FiImage aria-hidden="true" /> {uploading ? 'Saving...' : photoUrl ? 'Change picture' : 'Choose picture'}
         </button>
         {success && <p role="status" className="mt-3 text-sm text-green-700 dark:text-green-300">{success}</p>}
@@ -124,8 +149,27 @@ const ProfileMenu = () => {
             <input id="profile-username" autoFocus value={usernameDraft} onChange={event => setUsernameDraft(event.target.value)} required minLength={3} maxLength={20} pattern="[a-zA-Z0-9]+" autoComplete="username" disabled={savingUsername} aria-describedby="username-rules" className="mt-2 w-full rounded-xl border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
             <p id="username-rules" className="mt-2 text-xs text-slate-500 dark:text-slate-400">3–20 letters and numbers.</p>
             <div className="mt-3 flex gap-3"><button type="submit" disabled={savingUsername} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">{savingUsername ? 'Saving…' : 'Save'}</button><button type="button" disabled={savingUsername} onClick={() => { setEditingUsername(false); setError('') }} className="px-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Cancel</button></div>
-          </form> : <div className="mb-3 flex items-center gap-2"><p className="min-w-0 truncate text-sm font-semibold">{user.username}</p><button type="button" disabled={uploading || loggingOut} aria-label="Edit username" onClick={() => { setUsernameDraft(user.username); setEditingUsername(true); setError(''); setSuccess('') }} className="rounded-full p-2 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-blue-700"><FiEdit2 aria-hidden="true" /></button></div>}<button type="button" disabled={loggingOut || uploading || savingUsername} onClick={async () => { setLoggingOut(true); setError(''); try { await logout(); setOpen(false) } catch (failure) { setError(authError(failure)) } finally { setLoggingOut(false) } }} className="text-sm font-semibold text-blue-700 dark:text-blue-300 hover:underline">{loggingOut ? 'Logging out...' : 'Log out'}</button></> : <div className="flex gap-4"><Link to="/signup" onClick={() => setOpen(false)} className="font-semibold text-blue-700 dark:text-blue-300">Sign up</Link><Link to="/login" onClick={() => setOpen(false)} className="font-semibold text-blue-700 dark:text-blue-300">Log in</Link></div>}
+          </form> : <div className="mb-3 flex items-center gap-2"><p className="min-w-0 truncate text-sm font-semibold">{user.username}</p><button type="button" disabled={uploading || loggingOut} aria-label="Edit username" onClick={() => { setUsernameDraft(user.username); setEditingUsername(true); setError(''); setSuccess('') }} className="rounded-full p-2 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-blue-700"><FiEdit2 aria-hidden="true" /></button></div>}<button type="button" disabled={loggingOut || uploading || savingUsername || savingPreference} onClick={async () => { setLoggingOut(true); setError(''); try { await logout(); setOpen(false) } catch (failure) { setError(authError(failure)) } finally { setLoggingOut(false) } }} className="text-sm font-semibold text-blue-700 dark:text-blue-300 hover:underline">{loggingOut ? 'Logging out...' : 'Log out'}</button></> : <div className="flex gap-4"><Link to="/signup" onClick={() => setOpen(false)} className="font-semibold text-blue-700 dark:text-blue-300">Sign up</Link><Link to="/login" onClick={() => setOpen(false)} className="font-semibold text-blue-700 dark:text-blue-300">Log in</Link></div>}
         </div>
+        <div className="mt-4 border-t border-blue-100 pt-4 dark:border-slate-700">
+          <div className="flex items-center justify-between gap-4">
+            <p id="show-mature-stories-label" className="text-sm font-semibold">Show mature stories</p>
+            <button type="button" role="switch" aria-checked={user?.showMatureStories === true} aria-labelledby="show-mature-stories-label" aria-describedby="show-mature-stories-help" disabled={loading || uploading || loggingOut || savingUsername || savingPreference} onClick={toggleMatureStories}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50 ${user?.showMatureStories ? 'bg-blue-700' : 'bg-slate-300 dark:bg-slate-600'}`}>
+              <span aria-hidden="true" className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${user?.showMatureStories ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+          <p id="show-mature-stories-help" className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Mature stories are hidden from the library by default. Turn this on to include them.</p>
+          {savingPreference && <p role="status" className="mt-2 text-xs text-blue-700 dark:text-blue-300">Saving preference…</p>}
+        </div>
+        {user && <div className="mt-4 border-t border-blue-100 pt-4 dark:border-slate-700">
+          <div className="flex items-center justify-between gap-4"><p id="story-invitations-label" className="text-sm font-semibold">Allow story invitations</p>
+            <button type="button" role="switch" aria-checked={user.allowStoryInvitations !== false} aria-labelledby="story-invitations-label" disabled={loading || uploading || loggingOut || savingUsername || savingPreference} onClick={toggleStoryInvitations}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50 ${user.allowStoryInvitations !== false ? 'bg-blue-700' : 'bg-slate-300 dark:bg-slate-600'}`}>
+              <span aria-hidden="true" className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${user.allowStoryInvitations !== false ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div><p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Let authors invite you to read their stories through notifications.</p>
+        </div>}
         <p className="mt-4 text-xs leading-relaxed text-slate-500 dark:text-slate-400">PNG, JPEG, WebP, or GIF. Maximum 5 MB.</p>
       </div>}
       {cropDialog}

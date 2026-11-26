@@ -97,7 +97,7 @@ test('reader and library responses omit all character content even when supplied
 
 test('only the creator can pass the character editor ownership guard, including when another admin asks', async () => {
   const story = fixture()
-  Story.findOne = async (_filter, projection) => { assert.equal(projection, '+characters'); return story }
+  Story.findOne = async (_filter, projection) => { assert.ok(projection.includes('+characters')); return story }
   let allowed = false
   await requireStoryOwner({ params: { slug: story.slug }, user: { _id: ownerId } }, resMock(), () => { allowed = true })
   assert.equal(allowed, true)

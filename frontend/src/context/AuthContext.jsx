@@ -32,9 +32,10 @@ export const AuthProvider = ({ children }) => {
         if (active && failure.response?.status === 401) setUser(current => current?._id === accountId ? null : current)
       } finally { pending = false }
     }
+    const interval = window.setInterval(refresh, 30000)
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', refresh)
-    return () => { active = false; window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
   }, [accountId])
   const login = async (credentials) => {
     const { data } = await api.post('/user/login', credentials)

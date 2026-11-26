@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/auth.js'
 import { authError } from '../lib/api.js'
 import { useEffect, useRef, useState } from 'react'
-import { FiCamera, FiImage, FiUser, FiX, FiEdit2 } from 'react-icons/fi'
+import { FiCamera, FiImage, FiUser, FiX, FiEdit2, FiPlusCircle } from 'react-icons/fi'
 
 const ProfileMenu = () => {
   const { user, loading, logout, requireAccount, uploadProfilePic, updateUsername, updateShowMatureStories, updateAllowStoryInvitations } = useAuth()
@@ -136,6 +136,10 @@ const ProfileMenu = () => {
           </span>
           <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">{photoUrl ? 'Your saved profile picture.' : 'Choose a photo for your profile.'}</p>
         </div>
+
+        {['writer', 'admin'].includes(user?.role) && <Link to="/stories/new" onClick={() => setOpen(false)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950">
+          <FiPlusCircle aria-hidden="true" /> Upload stories
+        </Link>}
 
         <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={choosePhoto} className="sr-only" aria-label="Choose a profile picture" />
         <button type="button" disabled={loading || uploading || savingUsername || savingPreference} onClick={() => { if (requireAccount('Sign up to choose a profile picture.')) inputRef.current?.click(); else setOpen(false) }} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">

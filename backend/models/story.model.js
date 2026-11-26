@@ -1,3 +1,4 @@
+import planningSheetSchema from './planningSheet.model.js'
 import characterSchema from './character.model.js'
 import mongoose from 'mongoose'
 
@@ -51,6 +52,10 @@ const storySchema = new mongoose.Schema({
   },
   storytellerNote: { type: String, default: '' },
   characters: { type: [characterSchema], default: [], select: false, validate: { validator: characters => characters.length <= 100, message: 'A story can have up to 100 characters.' } },
+  events: { type: [planningSheetSchema], default: [], select: false, validate: { validator: sheets => sheets.length <= 100, message: 'A story can have up to 100 events.' } },
+  threads: { type: [planningSheetSchema], default: [], select: false, validate: { validator: sheets => sheets.length <= 100, message: 'A story can have up to 100 threads.' } },
+  archivedEvents: { type: [planningSheetSchema], default: [], select: false },
+  archivedThreads: { type: [planningSheetSchema], default: [], select: false },
   archivedCharacters: { type: [characterSchema], default: [], select: false },
   archivedChapters: { type: [chapterSchema], default: [] },
   chapters: {

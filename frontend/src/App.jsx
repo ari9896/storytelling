@@ -23,7 +23,8 @@ function App() {
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/admin/feedback" element={<AdminFeedback />} />
         <Route path="/admin/users" element={<Users />} />
-        <Route path="/admin/story-upload" element={<Suspense fallback={editorFallback}><StoryUpload key="new" /></Suspense>} />
+        <Route path="/stories/new" element={<Suspense fallback={editorFallback}><StoryUpload key="new" /></Suspense>} />
+        <Route path="/admin/story-upload" element={<Navigate to="/stories/new" replace />} />
         <Route path="/stories/:storyId/edit" element={<Suspense fallback={editorFallback}><StoryUpload mode="edit" /></Suspense>} />
         <Route path="/stories/:storyId" element={<StoryPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

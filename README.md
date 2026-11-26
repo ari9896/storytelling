@@ -91,7 +91,7 @@ Reading access follows the new order, so a reader may need to comment on newly p
 
 ### Private character sheets
 
-Each story has an initially empty character tray in its editor. Use + Add character to create a sheet, then enter a name, freeform notes (planned scenes, events, relationships, etc.), and up to five pictures. Select a character in the tray to switch the main editing card to that sheet. Selecting the active character again returns to the same chapter and chapter-picture selection. Previous/Next navigation switches to characters while a sheet is open. On wide screens the tray is fixed in the left margin; smaller screens use a sticky horizontal tray so it stays within the viewport.
+Each story has an initially empty character tray in its editor. Use + Add character to create a sheet, then enter a name, freeform notes (planned scenes, events, relationships, etc.), and up to five pictures. Select a character in the tray to switch the main editing card to that sheet. Selecting the active character again returns to the same chapter and chapter-picture selection. Previous/Next navigation switches to characters while a sheet is open. On wide screens the tray occupies a sticky left column; smaller screens wrap its buttons above the form. Long lists expand with the page instead of using an internal scrollbar.
 
 Save changes saves chapters and character sheets together. Unsaved sheets remain in local editor state while switching views, and a new story with character sheets opens in its saved editor. Sheets allow blank names/notes for rough ideas. Character sheets cannot be published and are excluded from library/reader/discussion responses, notifications, and chapter counts. The story creator's protected editor is the only endpoint that returns them.
 
@@ -100,3 +100,14 @@ Character subdocuments are defined in `backend/models/character.model.js`, embed
 Character pictures upload to Cloudinary as `authenticated` assets. Only the protected editor response generates signed delivery URLs for them. New unsaved uploads are cleaned up using the appropriate Cloudinary delivery type if saving fails; archived pictures are retained. Character pictures share the 25 MB per-save image budget with chapter pictures and the thumbnail. Existing Cloudinary credentials are used. The initial limits are 100 sheets per story, 200 characters per name, and 100,000 characters per notes field.
 
 Run `node --test backend/lib/characterSheets.test.js` for offline model, save/reload, identity, privacy, picture delivery, upload cleanup, and serialization checks. The editor route is loaded separately from the reader bundle.
+
+
+### Characters, Events, and Threads tabs
+
+The planning sidebar has three tabs: Characters, Events, and Threads. Switching tabs changes only the sidebar list. It does not switch or discard the current chapter, character, event, or thread being edited. Each tab has its own + button. Selecting an item opens it in the main editor; selecting the active item again, or choosing Return to chapter, restores the same chapter. Previous/Next navigation follows the type currently open in the editor, independently of the sidebar tab.
+
+Events and threads use only a title and plain text, matching the chapter title/text format. They have no picture fields or publication controls. Character sheets retain their existing name, notes, and up to five authenticated pictures. All planning categories are permanently private and saved together through Save changes. Blank fields are allowed for rough ideas. Unsaved content survives tab and editor-view switching. The sidebar and planning lists have no internal scrollbars.
+
+The model stores private `events`, `threads`, `archivedEvents`, and `archivedThreads` arrays alongside the private character sheets. Only the creator's protected editor explicitly selects these fields. Reader/library responses omit them, and they do not count as chapters or generate notifications. IDs are validated within both the story and category. Deleted planning sheets are archived on save. Requests from older clients that omit a group preserve the stored group and its archive. Planning sheets share the story's version check and atomic save.
+
+Initial limits are 100 sheets per category, 200 characters per title, and 100,000 characters per text field. Run `node --test backend/lib/planningSheets.test.js` for offline privacy, model validation, save/reload, category ownership, archiving, and frontend serialization checks.

@@ -1,3 +1,4 @@
+import { editorPlanningSheets, PLANNING_GROUPS, planningArchiveUpdates, preparePlanningSheets, validatePlanningSheets } from '../lib/planningSheets.js'
 import { cleanupStoryUploads, editorCharacters, prepareCharacterSheets, validateCharacterSheets } from '../lib/characterSheets.js'
 import { hasPublishedChapters, isPublishedChapter, publishedChapters, resolveChapterStatus } from '../lib/chapterPublication.js'
 import ReadingProgress from '../models/readingProgress.model.js'
@@ -20,6 +21,10 @@ export const validateStoryInput = (body, allowExistingImages = false, existingSt
   if (body.authorNote != null && (!validText(body.authorNote.title, 200) || !validText(body.authorNote.text, 100000))) return 'Complete the author note title and text.'
   const characterValidation = validateCharacterSheets(body.characters, existingStory?.characters || [], allowExistingImages)
   if (characterValidation.error) return characterValidation.error
+  for (const group of PLANNING_GROUPS) {
+    const error = validatePlanningSheets(body[group], existingStory?.[group] || [], allowExistingImages)
+    if (error) return error
+  }
   let totalBytes = characterValidation.bytes
   if (body.thumbnail != null) {
     const image = body.thumbnail
@@ -99,7 +104,7 @@ export const createStory = async (req, res) => {
       description: (chapters.find(isPublishedChapter)?.text || '').slice(0, 180),
       thumbnail,
       authorNote: req.body.authorNote ? { title: req.body.authorNote.title.trim(), text: req.body.authorNote.text } : null,
-      chapters, characters,
+      chapters, characters, events: preparePlanningSheets(req.body.events || []), threads: preparePlanningSheets(req.body.threads || []),
     })
     saved = true
     return res.status(201).json(readerStory(story, req.user))
@@ -130,7 +135,7 @@ export const getStory = async (req, res) => {
 export const requireStoryOwner = async (req, res, next) => {
   try {
     if (retiredStorySlugs.includes(req.params.slug)) return res.status(404).json({ error: 'Story not found.' })
-    const story = await Story.findOne({ slug: req.params.slug, deletedAt: null }, '+characters')
+    const story = await Story.findOne({ slug: req.params.slug, deletedAt: null }, '+characters +events +threads')
     if (!story) return res.status(404).json({ error: 'Story not found.' })
     if (!story.creatorId || String(story.creatorId) !== String(req.user._id)) return res.status(403).json({ error: 'Only the creator can edit this story.' })
     req.ownedStory = story
@@ -141,7 +146,7 @@ export const requireStoryOwner = async (req, res, next) => {
 export const getStoryEditor = (req, res) => {
   const story = req.ownedStory
   res.set('Cache-Control', 'private, no-store')
-  return res.json({ characters: editorCharacters(story), id: story.slug, version: story.__v, title: story.title, contentRating: story.contentRating || 'unrated', plannedChapterCount: story.plannedChapterCount || null,
+  return res.json({ ...editorPlanningSheets(story), characters: editorCharacters(story), id: story.slug, version: story.__v, title: story.title, contentRating: story.contentRating || 'unrated', plannedChapterCount: story.plannedChapterCount || null,
     thumbnail: story.thumbnail || null,
     authorNote: story.authorNote || (story.storytellerNote ? { title: 'A note from the storyteller', text: story.storytellerNote } : null),
     chapters: story.chapters.map(chapter => ({ id: String(chapter._id), status: chapter.status || 'published', title: chapter.title, text: chapter.text,
@@ -186,12 +191,14 @@ export const updateStory = async (req, res) => {
     }
     const fields = { contentRating: req.body.contentRating === undefined ? (story.contentRating || 'unrated') : req.body.contentRating, plannedChapterCount: req.body.plannedChapterCount === undefined ? story.plannedChapterCount : req.body.plannedChapterCount, title: req.body.title.trim(), authorNote: req.body.authorNote || null, storytellerNote: '', description: (chapters.find(isPublishedChapter)?.text || '').slice(0, 180), thumbnail }
     if (req.body.characters !== undefined) fields.characters = await prepareCharacterSheets(req.body.characters, story.characters || [], story.slug, uploaded)
+    for (const group of PLANNING_GROUPS) if (req.body[group] !== undefined) fields[group] = preparePlanningSheets(req.body[group], story[group] || [])
     const candidate = new Story({ ...story.toObject(), ...fields, chapters: chapters.map((chapter, index) => ({ ...(existingById.get(req.body.chapters[index].id)?.toObject() || {}), ...chapter })) })
     await candidate.validate()
     // Merge editor fields into the current database chapters, preserving comments posted while editing.
     const pipeline = [{ $set: {
       ...Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, { $literal: value }])),
       __v: { $add: ['$__v', 1] },
+      ...planningArchiveUpdates(req.body, fields),
       ...(req.body.characters === undefined ? {} : { archivedCharacters: { $concatArrays: [
         { $ifNull: ['$archivedCharacters', []] },
         { $map: { input: { $filter: { input: { $ifNull: ['$characters', []] }, as: 'oldCharacter', cond: { $not: [{ $in: ['$$oldCharacter._id', { $literal: fields.characters.map(character => character._id) }] }] } } }, as: 'removedCharacter', in: { $mergeObjects: ['$$removedCharacter', { deletedAt: { $literal: new Date() } }] } } },

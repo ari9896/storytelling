@@ -275,7 +275,6 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
     {positionError && <p role="status" className="mb-4 text-sm text-slate-500 dark:text-slate-400">{positionError}</p>}
     <ReaderCharacters characters={story.characters} visible={activeChapter !== null}>
     <StorySlides onParagraphChange={handleParagraphChange} resumeParagraphIndex={!location.search && !location.hash ? story.resumeParagraphIndex : null} following={ready && discussion.chapters.some(chapter => chapter.hasCommented)} initialIndex={initialSlideIndex} story={story} onSlideChange={handleSlideChange} canOpenSlide={canOpenSlide} />
-    </ReaderCharacters>
     {requiredChapter !== null && <ChapterCommentPrompt chapter={requiredChapter} onClose={() => setRequiredChapter(null)} />}
 
     {activeChapter !== null && <section id="discussion" className="mt-8 scroll-mt-32 rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-lg md:p-8">
@@ -326,6 +325,7 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
         ) : comments.map((comment) => renderComment(comment))}
       </div>
     </section>}
+    </ReaderCharacters>
     {inviting && <InviteReaders story={story} onClose={() => setInviting(false)} />}
     {selectedProfile && <UserCard key={selectedProfile} id={selectedProfile} onClose={() => setSelectedProfile(null)} />}
   </main>

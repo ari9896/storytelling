@@ -4,8 +4,9 @@ import mongoose from 'mongoose'
 import Story from '../models/story.model.js'
 import Notification from '../models/notification.model.js'
 import cloudinary from './cloudinary.js'
-import { cleanupStoryUploads, editorCharacters, prepareCharacterSheets, validateCharacterSheets } from './characterSheets.js'
+import { cleanupStoryUploads, editorCharacters, publicCharacters, prepareCharacterSheets, validateCharacterSheets } from './characterSheets.js'
 import { createStory, getStoryEditor, listStories, readerStory, requireStoryOwner, updateStory, validateStoryInput } from '../controllers/story.controller.js'
+import { loadStory } from './storyRepository.js'
 import { loadCharacterSheets, serializeCharacterSheets } from '../../frontend/src/lib/editorCharacters.js'
 
 const id = () => new mongoose.Types.ObjectId()
@@ -29,7 +30,7 @@ afterEach(() => {
   Object.assign(process.env, original.env)
 })
 
-test('character model supports blank private notes, caps pictures, and excludes sheets from normal selection', async () => {
+test('character model supports blank introductions, caps pictures, and requires explicit character selection', async () => {
   assert.equal(Story.schema.path('characters').options.select, false)
   assert.equal(Story.schema.path('archivedCharacters').options.select, false)
   const story = fixture(); story.characters[0].name = ''; story.characters[0].notes = ''
@@ -38,9 +39,10 @@ test('character model supports blank private notes, caps pictures, and excludes 
   await assert.rejects(story.validate(), /five pictures/)
 })
 
-test('sheet validation accepts unfinished notes and rejects publishing, invalid lengths, or too many pictures', () => {
+test('sheet validation accepts public introductions and rejects private visibility, invalid lengths, or too many pictures', () => {
   assert.deepEqual(validateCharacterSheets([{ name: '', notes: '', images: [] }]), { bytes: 0 })
-  for (const character of [{ ...sheet(), status: 'published' }, { ...sheet(), visibility: 'public' }, { ...sheet(), name: 'x'.repeat(201) }, { ...sheet(), notes: 'x'.repeat(100001) }, { ...sheet(), images: Array.from({ length: 6 }, () => ({ data: imageData })) }]) assert.ok(validateCharacterSheets([character]).error)
+  assert.deepEqual(validateCharacterSheets([{ ...sheet(), visibility: 'public' }]), { bytes: 0 })
+  for (const character of [{ ...sheet(), status: 'published' }, { ...sheet(), visibility: 'private' }, { ...sheet(), name: 'x'.repeat(201) }, { ...sheet(), notes: 'x'.repeat(100001) }, { ...sheet(), images: Array.from({ length: 6 }, () => ({ data: imageData })) }]) assert.ok(validateCharacterSheets([character]).error)
   assert.ok(validateCharacterSheets(Array.from({ length: 101 }, sheet)).error)
 })
 
@@ -55,7 +57,7 @@ test('saved character IDs and picture references cannot be copied from other she
   assert.ok(validateCharacterSheets([own], [], false).error)
 })
 
-test('story creation saves character sheets while returning no private character data', async () => {
+test('draft-only story creation saves characters without exposing their introductions', async () => {
   Story.create = async data => {
     assert.equal(data.characters[0].notes, sheet().notes)
     const story = new Story(data); await story.validate(); return story
@@ -63,7 +65,7 @@ test('story creation saves character sheets while returning no private character
   const res = resMock()
   await createStory({ user: { _id: ownerId }, body: { title: 'Story', chapters: [{ status: 'draft', title: '', text: '', images: [] }], characters: [sheet()] } }, res)
   assert.equal(res.code, 201)
-  assert.equal(Object.hasOwn(res.data, 'characters'), false)
+  assert.deepEqual(res.data.characters, [])
   assert.equal(JSON.stringify(res.data).includes(sheet().notes), false)
 })
 
@@ -82,15 +84,16 @@ test('protected editor returns character sheets and signed authenticated picture
   assert.equal(res.data.characters[0].id, String(story.characters[0]._id))
 })
 
-test('reader and library responses omit all character content even when supplied a fully loaded document', async () => {
+test('readers receive public characters while library summaries omit character content', async () => {
   const story = fixture()
   for (const user of [null, { _id: ownerId }, { _id: id(), role: 'admin' }]) {
     const view = readerStory(story, user)
-    assert.equal(Object.hasOwn(view, 'characters'), false)
-    assert.equal(JSON.stringify(view).includes(sheet().notes), false)
+    assert.equal(view.characters[0].name, 'Ayelen')
+    assert.equal(view.characters[0].intro, sheet().notes)
+    assert.equal(Object.hasOwn(view.characters[0], 'notes'), false)
     assert.equal(view.availableChapterCount, 1)
   }
-  Story.find = () => ({ select() { return this }, sort() { return this }, lean: async () => [story.toObject()] })
+  Story.find = () => ({ select() { return this }, populate() { return this }, sort() { return this }, lean: async () => [story.toObject()] })
   const res = resMock(); await listStories({}, res)
   assert.equal(JSON.stringify(res.data).includes(sheet().notes), false)
 })
@@ -127,7 +130,7 @@ test('character changes save atomically with the story and keep chapter IDs, com
   const res = resMock(); await updateStory({ ownedStory: story, user: { _id: ownerId }, body }, res)
   assert.equal(res.code, 200)
   assert.equal(res.data.availableChapterCount, 1)
-  assert.equal(Object.hasOwn(res.data, 'characters'), false)
+  assert.equal(res.data.characters[0].intro, 'Updated private plans.')
 })
 
 test('older save requests without characters preserve existing sheets and their archives', async () => {
@@ -215,4 +218,33 @@ test('the installed Cloudinary SDK generates signed authenticated URLs for chara
     assert.match(new URL(url).pathname, /\/image\/authenticated\/s--[^/]+--\/v123\/private-photo\.png$/)
     assert.equal(url.includes('offline-secret'), false)
   } finally { cloudinary.config(config) }
+})
+
+
+test('public profiles exclude archived and deleted characters, timestamps, asset IDs, and private planning', () => {
+  const story = fixture()
+  story.characters[0].images.push({ publicId: 'character-photo', url: 'unsigned', format: 'png', version: 123, explanation: 'A portrait' })
+  story.characters.push({ name: 'Removed', notes: 'Removed introduction', deletedAt: new Date(), images: [] })
+  story.archivedCharacters = [{ name: 'Archived', notes: 'Archived secret', images: [] }]
+  story.events = [{ title: 'Event', text: 'Secret future plot' }]
+  story.threads = [{ title: 'Thread', text: 'Secret theme' }]
+  cloudinary.url = () => 'https://signed.example/character-photo'
+  const characters = publicCharacters(story)
+  assert.equal(characters.length, 1)
+  assert.deepEqual(Object.keys(characters[0]).sort(), ['id', 'images', 'intro', 'name'])
+  assert.deepEqual(characters[0].images[0], { url: 'https://signed.example/character-photo', alt: '', explanation: 'A portrait' })
+  const view = readerStory(story, null)
+  for (const secret of ['Removed introduction', 'Archived secret', 'Secret future plot', 'Secret theme', 'publicId', 'archivedCharacters']) assert.equal(JSON.stringify(view).includes(secret), false)
+  assert.equal(view.characters[0].intro, sheet().notes)
+})
+
+test('reader story loading explicitly selects characters without events, threads or archived characters', async () => {
+  const story = fixture()
+  Story.findOne = async (filter, projection) => {
+    assert.equal(filter.slug, story.slug)
+    assert.equal(filter.deletedAt, null)
+    assert.equal(projection, '+characters')
+    return story
+  }
+  assert.equal(await loadStory(story.slug, true), story)
 })

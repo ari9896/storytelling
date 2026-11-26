@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext.jsx'
 import AuthPage from './pages/AuthPage.jsx'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Home from './pages/Home.jsx'
+import MyStories from './pages/MyStories.jsx'
 import StoryPage from './pages/StoryPage.jsx'
 import SiteLayout from './layouts/SiteLayout.jsx'
 
@@ -20,6 +21,7 @@ function App() {
         <Route path="/signup" element={<AuthPage key="signup" mode="signup" />} />
         <Route path="/login" element={<AuthPage key="login" mode="login" />} />
         <Route path="/" element={<Home />} />
+        <Route path="/my-stories" element={<MyStories />} />
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/admin/feedback" element={<AdminFeedback />} />
         <Route path="/admin/users" element={<Users />} />

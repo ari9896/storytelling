@@ -53,7 +53,7 @@ test('reader and editor projections return the saved rating, with safe legacy fa
 })
 
 test('library responses include rating labels without classifying older stories as Everyone', async () => {
-  Story.find = () => ({ select(fields) { assert.ok(fields.includes('contentRating')); return this }, sort() { return this }, lean: async () => [{ slug: 'new', title: 'New', contentRating: 'mature' }, { slug: 'old', title: 'Old' }] })
+  Story.find = () => ({ select(fields) { assert.ok(fields.includes('contentRating')); return this }, populate() { return this }, sort() { return this }, lean: async () => [{ slug: 'new', title: 'New', contentRating: 'mature' }, { slug: 'old', title: 'Old' }] })
   const res = resMock(); await listStories({ user: { showMatureStories: true } }, res)
   assert.equal(res.data[0].contentRating, 'mature')
   assert.equal(res.data[1].contentRating, 'unrated')

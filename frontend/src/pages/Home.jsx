@@ -57,7 +57,7 @@ const Home = () => {
               </div>
             )}
             <div className="p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{story.title}</h3><StoryRating value={story.contentRating} /></div>
+              <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{story.title}{story.authorUsername && <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">by {story.authorUsername}</span>}</h3><StoryRating value={story.contentRating} /></div>
               <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{story.description}</p>
               <span className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-blue-700 dark:text-blue-300 group-hover:underline">Read story <FiArrowRight aria-hidden="true" /></span>
             </div>

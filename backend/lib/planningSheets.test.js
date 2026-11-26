@@ -68,15 +68,17 @@ test('owner editor returns each planning group with stable IDs and title/text fi
   assert.deepEqual(editorPlanningSheets({}), { events: [], threads: [] })
 })
 
-test('public reader and library data exclude all planning text, IDs and category arrays', async () => {
+test('public reader includes characters while excluding private events and threads', async () => {
   const story = fixture()
   for (const user of [null, { _id: ownerId }, { _id: id(), role: 'admin' }]) {
     const view = readerStory(story, user)
-    for (const field of ['characters', 'events', 'threads']) assert.equal(Object.hasOwn(view, field), false)
-    assert.equal(JSON.stringify(view).includes('Private'), false)
+    for (const field of ['events', 'threads']) assert.equal(Object.hasOwn(view, field), false)
+    assert.equal(view.characters[0].intro, story.characters[0].notes)
+    assert.equal(JSON.stringify(view).includes('Private future event'), false)
+    assert.equal(JSON.stringify(view).includes('Private ongoing thread'), false)
     assert.equal(view.availableChapterCount, 1)
   }
-  Story.find = () => ({ select() { return this }, sort() { return this }, lean: async () => [story.toObject()] })
+  Story.find = () => ({ select() { return this }, populate() { return this }, sort() { return this }, lean: async () => [story.toObject()] })
   const res = resMock(); await listStories({}, res)
   assert.equal(JSON.stringify(res.data).includes('Private'), false)
 })

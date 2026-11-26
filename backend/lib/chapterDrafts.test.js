@@ -115,7 +115,7 @@ test('other readers and admins cannot bypass ownership to access the draft edito
 test('library query requires a published or legacy chapter', async () => {
   Story.find = filter => {
     assert.deepEqual(filter.chapters, { $elemMatch: { status: { $ne: 'draft' } } })
-    return { select() { return this }, sort() { return this }, lean: async () => [] }
+    return { select() { return this }, populate() { return this }, sort() { return this }, lean: async () => [] }
   }
   const res = resMock(); await listStories({}, res)
   assert.deepEqual(res.data, [])
@@ -127,7 +127,7 @@ test('private draft listing is scoped to the current creator and exposes only su
     assert.equal(filter.creatorId, ownerId)
     assert.equal(filter['chapters.status'], 'draft')
     assert.equal(filter.deletedAt, null)
-    return { select() { return this }, sort() { return this }, lean: async () => [story.toObject()] }
+    return { select() { return this }, populate() { return this }, sort() { return this }, lean: async () => [story.toObject()] }
   }
   const res = resMock(); await listDraftStories({ user: { _id: ownerId } }, res)
   assert.deepEqual(res.data, [{ id: story.slug, title: story.title, draftChapterCount: 1, publishedChapterCount: 1 }])

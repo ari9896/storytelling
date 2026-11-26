@@ -1,3 +1,4 @@
+import { useAuth } from '../context/auth.js'
 import UserRoleForm from './UserRoleForm.jsx'
 import CommentRestrictionForm from './CommentRestrictionForm.jsx'
 import { useEffect, useRef, useState } from 'react'
@@ -6,6 +7,7 @@ import { FiX } from 'react-icons/fi'
 import { api, authError } from '../lib/api.js'
 
 const UserDetails = ({ id, onClose, onRoleSaved }) => {
+  const { user } = useAuth()
   const dialog = useRef(null)
   const [details, setDetails] = useState(null)
   const [error, setError] = useState('')
@@ -35,6 +37,7 @@ const UserDetails = ({ id, onClose, onRoleSaved }) => {
       {!details.participation.length && <p className="mt-4 text-sm">No story participation recorded.</p>}
       <div className="mt-4 space-y-3">{details.participation.map(story => <div key={story.id} className="rounded-xl bg-blue-50 p-4 dark:bg-slate-800"><p className="font-semibold">{story.deleted ? <>{story.title} · Deleted story</> : <Link to={`/stories/${story.id}`} onClick={onClose} className="text-blue-700 hover:underline dark:text-blue-300">{story.title}</Link>}</p><p className="mt-2 text-sm">{story.commentCount} comments / replies</p><p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{story.chapters.map(chapter => `Chapter ${chapter.number}: ${chapter.title}`).join(' · ')}</p></div>)}</div>
       <h3 className="mt-8 text-lg font-bold">Stories uploaded</h3>
+      {String(user?._id) === String(details.user._id) && <Link to="/my-stories" onClick={onClose} className="mt-3 inline-block text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">My stories →</Link>}
       <ul className="mt-3 space-y-2 text-sm">{details.authoredStories.map(story => <li key={story.id}>{story.deleted ? `${story.title} · Deleted story` : <Link to={`/stories/${story.id}`} onClick={onClose} className="text-blue-700 hover:underline dark:text-blue-300">{story.title}</Link>}</li>)}</ul>
       {!details.authoredStories.length && <p className="mt-3 text-sm">No stories uploaded.</p>}
     </>}

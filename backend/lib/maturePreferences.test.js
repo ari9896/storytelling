@@ -64,7 +64,7 @@ test('guests, legacy accounts, readers, writers and admins all hide mature stori
       assert.deepEqual(filter.contentRating, { $ne: 'mature' })
       assert.equal(filter.deletedAt, null)
       assert.ok(filter.slug.$nin)
-      return { select() { return this }, sort() { return this }, lean: async () => [] }
+      return { select() { return this }, populate() { return this }, sort() { return this }, lean: async () => [] }
     }
     const res = resMock()
     await listStories({ user, query: { showMatureStories: 'true' } }, res)
@@ -78,7 +78,7 @@ test('explicitly enabling mature stories includes them while keeping deletion fi
     assert.equal(filter.contentRating, undefined)
     assert.equal(filter.deletedAt, null)
     assert.ok(filter.slug.$nin)
-    return { select() { return this }, sort() { return this }, lean: async () => [{ slug: 'mature', title: 'Mature story', contentRating: 'mature' }] }
+    return { select() { return this }, populate() { return this }, sort() { return this }, lean: async () => [{ slug: 'mature', title: 'Mature story', contentRating: 'mature' }] }
   }
   const res = resMock()
   await listStories({ user: { _id: userId, showMatureStories: true } }, res)

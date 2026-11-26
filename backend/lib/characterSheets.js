@@ -8,8 +8,8 @@ export const validateCharacterSheets = (characters, existing = [], allowExisting
   const seen = new Set()
   let bytes = 0
   for (const character of characters) {
-    if (!character || typeof character.name !== 'string' || character.name.length > 200 || typeof character.notes !== 'string' || character.notes.length > 100000) return { error: 'Character names can be up to 200 characters and notes up to 100,000 characters.' }
-    if (character.status !== undefined || (character.visibility !== undefined && character.visibility !== 'private')) return { error: 'Character sheets are always private and cannot be published.' }
+    if (!character || typeof character.name !== 'string' || character.name.length > 200 || typeof character.notes !== 'string' || character.notes.length > 100000) return { error: 'Character names can be up to 200 characters and introductions up to 100,000 characters.' }
+    if (character.status !== undefined || (character.visibility !== undefined && character.visibility !== 'public')) return { error: 'Characters are public. Use events or threads for private planning.' }
     if (character.id !== undefined) {
       if (!allowExisting || typeof character.id !== 'string' || !byId.has(character.id) || seen.has(character.id)) return { error: 'Each saved character must belong to this story and appear only once.' }
       seen.add(character.id)
@@ -62,3 +62,10 @@ export const editorCharacters = story => (story.characters || []).map(character 
 export const cleanupStoryUploads = uploaded => Promise.allSettled(uploaded.map(asset => typeof asset === 'string'
   ? cloudinary.uploader.destroy(asset)
   : cloudinary.uploader.destroy(asset.publicId, { type: asset.type, resource_type: 'image' })))
+
+// Keep storage and editor payloads compatible with existing character notes and authenticated images.
+// Readers receive only the public introduction and display metadata, never archived sheets or asset IDs.
+export const publicCharacters = story => editorCharacters({ characters: (story.characters || []).filter(character => !character.deletedAt) })
+  .map(character => ({ id: character.id, name: character.name, intro: character.notes,
+    images: character.images.map(({ url, alt, explanation }) => ({ url, alt, explanation })),
+  }))

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/auth.js'
 import { authError } from '../lib/api.js'
 import { useEffect, useRef, useState } from 'react'
-import { FiCamera, FiImage, FiUser, FiX, FiEdit2, FiPlusCircle } from 'react-icons/fi'
+import { FiCamera, FiImage, FiUser, FiX, FiEdit2, FiPlusCircle, FiBookOpen } from 'react-icons/fi'
 
 const ProfileMenu = () => {
   const { user, loading, logout, requireAccount, uploadProfilePic, updateUsername, updateShowMatureStories, updateAllowStoryInvitations } = useAuth()
@@ -136,6 +136,10 @@ const ProfileMenu = () => {
           </span>
           <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">{photoUrl ? 'Your saved profile picture.' : 'Choose a photo for your profile.'}</p>
         </div>
+
+        {user && <Link to="/my-stories" onClick={() => setOpen(false)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950">
+          <FiBookOpen aria-hidden="true" /> My stories
+        </Link>}
 
         {['writer', 'admin'].includes(user?.role) && <Link to="/stories/new" onClick={() => setOpen(false)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950">
           <FiPlusCircle aria-hidden="true" /> Upload stories

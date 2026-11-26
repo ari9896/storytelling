@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { FiUser, FiX } from 'react-icons/fi'
 import { api, authError } from '../lib/api.js'
 import { useAuth } from '../context/auth.js'
 import AdminUserDetails from './AdminUserDetails.jsx'
 
 const PublicUserCard = ({ id, onClose }) => {
+  const { user } = useAuth()
   const dialog = useRef(null)
   const [profile, setProfile] = useState(null)
   const [error, setError] = useState('')
@@ -23,6 +25,7 @@ const PublicUserCard = ({ id, onClose }) => {
     {!profile && !error && <p role="status">Loading profile…</p>}
     {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
     {profile && <>{profile.profilePic ? <img src={profile.profilePic} alt={`${profile.username} profile picture`} className="mx-auto h-28 w-28 rounded-full object-cover" /> : <span className="mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-blue-100 text-4xl text-blue-700 dark:bg-blue-950 dark:text-blue-300"><FiUser aria-hidden="true" /></span>}<p className="mt-5 break-words text-2xl font-bold">{profile.username}</p>{profile.createdAt && <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p>}</>}
+    {profile && String(user?._id) === String(id) && <Link to="/my-stories" onClick={onClose} className="mt-5 inline-block text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">My stories →</Link>}
   </dialog>
 }
 const UserCard = props => {

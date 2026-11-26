@@ -13,6 +13,7 @@ import { firstMissingComment } from '../lib/chapterAccess.js'
 import { useAuth } from '../context/auth.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import ReaderCharacters from '../components/ReaderCharacters.jsx'
 import StorySlides from '../components/StorySlides.jsx'
 
 const StorytellingSandbox = ({ story, onProgressSaved }) => {
@@ -272,7 +273,9 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
     {deleteError && <p role="alert" className="mb-5 rounded-xl bg-red-50 dark:bg-red-950 p-4 text-sm text-red-700 dark:text-red-300">{deleteError}</p>}
     <div className="mb-6 flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{story.title}</h1><StoryRating value={story.contentRating} /></div>
     {positionError && <p role="status" className="mb-4 text-sm text-slate-500 dark:text-slate-400">{positionError}</p>}
+    <ReaderCharacters characters={story.characters} visible={activeChapter !== null}>
     <StorySlides onParagraphChange={handleParagraphChange} resumeParagraphIndex={!location.search && !location.hash ? story.resumeParagraphIndex : null} following={ready && discussion.chapters.some(chapter => chapter.hasCommented)} initialIndex={initialSlideIndex} story={story} onSlideChange={handleSlideChange} canOpenSlide={canOpenSlide} />
+    </ReaderCharacters>
     {requiredChapter !== null && <ChapterCommentPrompt chapter={requiredChapter} onClose={() => setRequiredChapter(null)} />}
 
     {activeChapter !== null && <section id="discussion" className="mt-8 scroll-mt-32 rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-lg md:p-8">

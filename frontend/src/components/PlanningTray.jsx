@@ -36,8 +36,8 @@ const PlanningTray = ({ mode, onModeChange, items, selectedIndex, onSelect, onAd
     const next = key === 'Home' ? 0 : key === 'End' ? 2 : (index + (key === 'ArrowRight' || key === 'ArrowDown' ? 1 : -1) + 3) % 3
     onModeChange(PLANNING_TABS[next]); tabs.current[next]?.focus()
   }
-  return <><aside ref={trayRef} aria-label="Private story planning" className="relative z-10 mb-5 rounded-2xl border border-blue-200 bg-white/95 p-2 shadow-md backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/95 xl:sticky xl:top-[calc(var(--site-header-height,8rem)+1rem)] xl:w-full">
-    <p className="mb-2 px-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{plural} · Private</p>
+  return <><aside ref={trayRef} aria-label="Story characters and planning" className="relative z-10 mb-5 rounded-2xl border border-blue-200 bg-white/95 p-2 shadow-md backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/95 xl:sticky xl:top-[calc(var(--site-header-height,8rem)+1rem)] xl:w-full">
+    <p className="mb-2 px-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{plural} · {mode === 'characters' ? 'Public' : 'Private'}</p>
     <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${mode}`} className="flex flex-wrap gap-2 xl:flex-col xl:flex-nowrap">
       {items.map((item, index) => { const title = (mode === 'characters' ? item.name : item.title).trim() || `Untitled ${single}`
         return <button key={item.id} type="button" disabled={disabled} aria-pressed={selectedIndex === index} onClick={() => onSelect(index)} title={selectedIndex === index ? 'Return to chapter editor' : title}

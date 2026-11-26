@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 
-// Private character sheets are embedded in their story and share its save/version boundary.
+// Public character profiles are embedded in their story and share its save/version boundary.
+// The legacy notes field stores the introduction; archived characters remain private.
 const characterImageSchema = new mongoose.Schema({
   url: { type: String, required: true },
   publicId: { type: String, required: true },

@@ -1,5 +1,5 @@
 import { editorPlanningSheets, PLANNING_GROUPS, planningArchiveUpdates, preparePlanningSheets, validatePlanningSheets } from '../lib/planningSheets.js'
-import { cleanupStoryUploads, editorCharacters, prepareCharacterSheets, validateCharacterSheets } from '../lib/characterSheets.js'
+import { cleanupStoryUploads, editorCharacters, publicCharacters, prepareCharacterSheets, validateCharacterSheets } from '../lib/characterSheets.js'
 import { hasPublishedChapters, isPublishedChapter, publishedChapters, resolveChapterStatus } from '../lib/chapterPublication.js'
 import ReadingProgress from '../models/readingProgress.model.js'
 import { resumeChapterId } from './readingProgress.controller.js'
@@ -59,6 +59,7 @@ export const validateStoryInput = (body, allowExistingImages = false, existingSt
 }
 
 export const readerStory = (story, user) => ({
+  characters: hasPublishedChapters(story) ? publicCharacters(story) : [],
   contentRating: story.contentRating || 'unrated',
   creatorId: story.creatorId ? String(story.creatorId) : null,
   id: story.slug, title: story.title, description: story.description,
@@ -117,15 +118,15 @@ export const createStory = async (req, res) => {
 export const listStories = async (req, res) => {
   res.set('Cache-Control', 'private, no-store')
   try {
-    const stories = await Story.find({ deletedAt: null, chapters: { $elemMatch: { status: { $ne: 'draft' } } }, slug: { $nin: retiredStorySlugs }, ...(req.user?.showMatureStories === true ? {} : { contentRating: { $ne: 'mature' } }) }).select('title slug description thumbnail contentRating').sort({ createdAt: -1 }).lean()
-    return res.json(stories.map(story => ({ id: story.slug, title: story.title, contentRating: story.contentRating || 'unrated', description: story.description, coverImage: story.thumbnail?.url || null, coverAlt: story.thumbnail?.alt || '', label: 'Story' })))
+    const stories = await Story.find({ deletedAt: null, chapters: { $elemMatch: { status: { $ne: 'draft' } } }, slug: { $nin: retiredStorySlugs }, ...(req.user?.showMatureStories === true ? {} : { contentRating: { $ne: 'mature' } }) }).select('title slug description thumbnail contentRating creatorId').populate('creatorId', 'username').sort({ createdAt: -1 }).lean()
+    return res.json(stories.map(story => ({ id: story.slug, title: story.title, authorUsername: story.creatorId?.username || null, contentRating: story.contentRating || 'unrated', description: story.description, coverImage: story.thumbnail?.url || null, coverAlt: story.thumbnail?.alt || '', label: 'Story' })))
   } catch { return res.status(500).json({ error: 'Unable to load saved stories.' }) }
 }
 
 export const getStory = async (req, res) => {
   try {
     res.set('Cache-Control', 'private, no-store')
-    const story = await loadStory(req.params.slug)
+    const story = await loadStory(req.params.slug, true)
     if (!story || !hasPublishedChapters(story)) return res.status(404).json({ error: 'Story not found.' })
     const progress = req.user ? await ReadingProgress.findOne({ userId: req.user._id, storyId: story._id }).lean() : null
     return res.json({ ...readerStory(story, req.user), resumeChapterId: resumeChapterId(story, req.user, progress), resumeParagraphIndex: resumeChapterId(story, req.user, progress) && Number.isInteger(progress?.paragraphIndex) ? progress.paragraphIndex : null })
@@ -262,4 +263,17 @@ export const listDraftStories = async (req, res) => {
       publishedChapterCount: publishedChapters(story).length,
     })))
   } catch { return res.status(500).json({ error: 'Unable to load your drafts. Please try again.' }) }
+}
+
+export const listMyStories = async (req, res) => {
+  res.set('Cache-Control', 'private, no-store')
+  try {
+    const stories = await Story.find({ creatorId: req.user._id, deletedAt: null, slug: { $nin: retiredStorySlugs } })
+      .select('title slug thumbnail contentRating chapters.status').sort({ updatedAt: -1, _id: -1 }).lean()
+    return res.json(stories.map(story => ({ id: story.slug, title: story.title,
+      contentRating: story.contentRating || 'unrated', coverImage: story.thumbnail?.url || null, coverAlt: story.thumbnail?.alt || '',
+      draftChapterCount: story.chapters.filter(chapter => !isPublishedChapter(chapter)).length,
+      publishedChapterCount: publishedChapters(story).length,
+    })))
+  } catch { return res.status(500).json({ error: 'Unable to load your stories. Please try again.' }) }
 }

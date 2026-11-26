@@ -17,7 +17,7 @@ import { publishedChapters } from './chapterPublication.js'
 
 const id = () => new mongoose.Types.ObjectId()
 const ownerId = id(), readerId = id()
-const resMock = () => ({ code: 200, status(code) { this.code = code; return this }, set() { return this }, json(data) { this.data = data; return this } })
+const resMock = () => ({ code: 200, set() { return this }, status(code) { this.code = code; return this }, set() { return this }, json(data) { this.data = data; return this } })
 const storyFixture = () => new Story({ title: 'Draft testing', slug: 'draft-testing', creatorId: ownerId, __v: 0, chapters: [
   { title: 'Public opening', text: 'Public opening text.', number: 1, commentedUserIds: [readerId] },
   { status: 'draft', title: 'Secret draft title', text: 'Secret unfinished ideas.', number: 2, images: [{ url: 'https://example.com/private-draft-image', explanation: 'Private explanation' }] },

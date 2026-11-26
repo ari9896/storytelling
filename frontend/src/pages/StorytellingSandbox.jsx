@@ -1,3 +1,4 @@
+import DeleteActionMenu from '../components/DeleteActionMenu.jsx'
 import InviteReaders from '../components/InviteReaders.jsx'
 import StoryRating from '../components/StoryRating.jsx'
 import CommentReactions from '../components/CommentReactions.jsx'
@@ -260,11 +261,13 @@ const StorytellingSandbox = ({ story, onProgressSaved }) => {
   <main className="mx-auto w-full max-w-5xl py-10">
     <div className="mb-6 flex flex-wrap items-center gap-4 sm:gap-6">
       <Link to="/#stories" className="text-sm font-semibold text-blue-700 dark:text-blue-300 hover:underline">← All stories</Link>
-      {story.creatorId && user?._id === story.creatorId && <div className="flex flex-wrap items-center gap-3">
-        <Link to={`/stories/${story.id}/edit`} className="inline-flex rounded-full border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 px-5 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 shadow-sm hover:bg-blue-50 dark:hover:bg-slate-800">Edit story</Link>
-        <button type="button" onClick={() => setInviting(true)} className="inline-flex rounded-full border border-blue-200 bg-white px-5 py-2 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50 dark:border-blue-900 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-slate-800">Invite readers</button>
-        <button type="button" disabled={deleting || posting} onClick={deleteStory} className="rounded-full border border-red-200 dark:border-red-900 bg-white dark:bg-slate-900 px-5 py-2 text-sm font-semibold text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50">{deleting ? 'Deleting…' : 'Delete story'}</button>
-      </div>}
+      {story.creatorId && user?._id === story.creatorId && <>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+          <Link to={`/stories/${story.id}/edit`} className="inline-flex rounded-full border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 px-5 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 shadow-sm hover:bg-blue-50 dark:hover:bg-slate-800">Edit story</Link>
+          <button type="button" onClick={() => setInviting(true)} className="inline-flex rounded-full border border-blue-200 bg-white px-5 py-2 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50 dark:border-blue-900 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-slate-800">Invite readers</button>
+        </div>
+        <div className="ml-auto"><DeleteActionMenu label="Story options" actionLabel={deleting ? 'Deleting…' : 'Delete story'} onDelete={deleteStory} disabled={deleting || posting} /></div>
+      </>}
     </div>
     {deleteError && <p role="alert" className="mb-5 rounded-xl bg-red-50 dark:bg-red-950 p-4 text-sm text-red-700 dark:text-red-300">{deleteError}</p>}
     <div className="mb-6 flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{story.title}</h1><StoryRating value={story.contentRating} /></div>

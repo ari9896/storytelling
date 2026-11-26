@@ -76,3 +76,27 @@ Saving drafts sends no new-chapter notifications. Publishing a previously saved 
 This adds publication controls for whole chapters; edits to a chapter that remains Published become public when saved. It does not keep a separate private revision of a published chapter.
 
 Run `node --test backend/lib/chapterDrafts.test.js` for offline publication, privacy, persistence, progression, and notification checks.
+
+
+### Reordering chapters
+
+In the editor's chapter cards, drag the handle to another chapter to move it there. The handle supports mouse and touch, with scrolling near the viewport edges. Up/down buttons and arrow keys on a focused handle provide alternatives. Numbers follow the new positions immediately; save the story to persist the order. The author’s note and story thumbnail remain outside the chapter order. The current chapter and its selected image remain open when another chapter moves.
+
+Chapter IDs stay unchanged, so text, titles, images, explanations, comments, reactions, unlock markers, and bookmarks remain attached to the same chapter. Save merges edited fields into current database chapters by ID, preserving comments posted while the editor was open. The public description follows the new first published chapter. Reordering already published chapters does not trigger new-chapter notifications.
+
+Draft/Published status moves with each chapter. If a draft is moved ahead of a published chapter, the editor warns and prevents saving until publication order is valid; it never automatically publishes or hides chapters. New chapters can be inserted between existing chapters, subject to that publication rule. Existing chapter IDs must still belong to the story and may appear only once.
+
+Reading access follows the new order, so a reader may need to comment on newly preceding chapters before continuing. Their previous comments and bookmarks are retained. Run `node --test backend/lib/chapterOrder.test.js` for offline movement, persistence, identity, privacy and conflict checks.
+
+
+### Private character sheets
+
+Each story has an initially empty character tray in its editor. Use + Add character to create a sheet, then enter a name, freeform notes (planned scenes, events, relationships, etc.), and up to five pictures. Select a character in the tray to switch the main editing card to that sheet. Selecting the active character again returns to the same chapter and chapter-picture selection. Previous/Next navigation switches to characters while a sheet is open. On wide screens the tray is fixed in the left margin; smaller screens use a sticky horizontal tray so it stays within the viewport.
+
+Save changes saves chapters and character sheets together. Unsaved sheets remain in local editor state while switching views, and a new story with character sheets opens in its saved editor. Sheets allow blank names/notes for rough ideas. Character sheets cannot be published and are excluded from library/reader/discussion responses, notifications, and chapter counts. The story creator's protected editor is the only endpoint that returns them.
+
+Character subdocuments are defined in `backend/models/character.model.js`, embedded under the story's private `characters` field, and protected by the same story version and atomic update as chapter edits. Both `characters` and `archivedCharacters` are excluded from normal Mongoose selection. Removing a sheet archives it on save. Existing saved character and image IDs are checked against the current story before accepting changes. Older clients that omit characters preserve the stored sheets.
+
+Character pictures upload to Cloudinary as `authenticated` assets. Only the protected editor response generates signed delivery URLs for them. New unsaved uploads are cleaned up using the appropriate Cloudinary delivery type if saving fails; archived pictures are retained. Character pictures share the 25 MB per-save image budget with chapter pictures and the thumbnail. Existing Cloudinary credentials are used. The initial limits are 100 sheets per story, 200 characters per name, and 100,000 characters per notes field.
+
+Run `node --test backend/lib/characterSheets.test.js` for offline model, save/reload, identity, privacy, picture delivery, upload cleanup, and serialization checks. The editor route is loaded separately from the reader bundle.

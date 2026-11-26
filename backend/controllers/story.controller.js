@@ -1,3 +1,4 @@
+import { cleanupStoryUploads, editorCharacters, prepareCharacterSheets, validateCharacterSheets } from '../lib/characterSheets.js'
 import { hasPublishedChapters, isPublishedChapter, publishedChapters, resolveChapterStatus } from '../lib/chapterPublication.js'
 import ReadingProgress from '../models/readingProgress.model.js'
 import { resumeChapterId } from './readingProgress.controller.js'
@@ -17,7 +18,9 @@ export const validateStoryInput = (body, allowExistingImages = false, existingSt
   if (!Array.isArray(body.chapters) || !body.chapters.length || body.chapters.length > 50) return 'Add between 1 and 50 chapters.'
   if (body.plannedChapterCount != null && (!Number.isInteger(body.plannedChapterCount) || body.plannedChapterCount < body.chapters.length || body.plannedChapterCount > 10000)) return 'Planned chapter count must be a whole number between the available chapter count and 10,000.'
   if (body.authorNote != null && (!validText(body.authorNote.title, 200) || !validText(body.authorNote.text, 100000))) return 'Complete the author note title and text.'
-  let totalBytes = 0
+  const characterValidation = validateCharacterSheets(body.characters, existingStory?.characters || [], allowExistingImages)
+  if (characterValidation.error) return characterValidation.error
+  let totalBytes = characterValidation.bytes
   if (body.thumbnail != null) {
     const image = body.thumbnail
     if (!(allowExistingImages && typeof image.publicId === 'string' && !image.data)) {
@@ -70,7 +73,7 @@ export const readerStory = (story, user) => ({
 export const createStory = async (req, res) => {
   const error = validateStoryInput(req.body)
   if (error) return res.status(400).json({ error })
-  const hasImages = !!req.body.thumbnail || req.body.chapters.some(chapter => chapter.images.length)
+  const hasImages = !!req.body.thumbnail || req.body.chapters.some(chapter => chapter.images.length) || (req.body.characters || []).some(character => character.images.length)
   if (hasImages && !['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'].every(key => process.env[key]?.trim())) return res.status(503).json({ error: 'Cloudinary uploads are not configured.' })
   const uploaded = []
   let saved = false
@@ -87,6 +90,7 @@ export const createStory = async (req, res) => {
       }
       chapters.push({ number: index + 1, status: resolveChapterStatus(chapter), title: chapter.title.trim(), text: chapter.text, images })
     }
+    const characters = await prepareCharacterSheets(req.body.characters || [], [], slug, uploaded)
     const story = await Story.create({
       creatorId: req.user._id,
       title: req.body.title.trim(), slug,
@@ -95,12 +99,12 @@ export const createStory = async (req, res) => {
       description: (chapters.find(isPublishedChapter)?.text || '').slice(0, 180),
       thumbnail,
       authorNote: req.body.authorNote ? { title: req.body.authorNote.title.trim(), text: req.body.authorNote.text } : null,
-      chapters,
+      chapters, characters,
     })
     saved = true
     return res.status(201).json(readerStory(story, req.user))
   } catch {
-    if (!saved) await Promise.allSettled(uploaded.map(id => cloudinary.uploader.destroy(id)))
+    if (!saved) await cleanupStoryUploads(uploaded)
     return res.status(500).json({ error: 'Unable to save your story. Your editor has been kept; please try again.' })
   }
 }
@@ -126,7 +130,7 @@ export const getStory = async (req, res) => {
 export const requireStoryOwner = async (req, res, next) => {
   try {
     if (retiredStorySlugs.includes(req.params.slug)) return res.status(404).json({ error: 'Story not found.' })
-    const story = await Story.findOne({ slug: req.params.slug, deletedAt: null })
+    const story = await Story.findOne({ slug: req.params.slug, deletedAt: null }, '+characters')
     if (!story) return res.status(404).json({ error: 'Story not found.' })
     if (!story.creatorId || String(story.creatorId) !== String(req.user._id)) return res.status(403).json({ error: 'Only the creator can edit this story.' })
     req.ownedStory = story
@@ -136,7 +140,8 @@ export const requireStoryOwner = async (req, res, next) => {
 
 export const getStoryEditor = (req, res) => {
   const story = req.ownedStory
-  return res.json({ id: story.slug, version: story.__v, title: story.title, contentRating: story.contentRating || 'unrated', plannedChapterCount: story.plannedChapterCount || null,
+  res.set('Cache-Control', 'private, no-store')
+  return res.json({ characters: editorCharacters(story), id: story.slug, version: story.__v, title: story.title, contentRating: story.contentRating || 'unrated', plannedChapterCount: story.plannedChapterCount || null,
     thumbnail: story.thumbnail || null,
     authorNote: story.authorNote || (story.storytellerNote ? { title: 'A note from the storyteller', text: story.storytellerNote } : null),
     chapters: story.chapters.map(chapter => ({ id: String(chapter._id), status: chapter.status || 'published', title: chapter.title, text: chapter.text,
@@ -151,17 +156,14 @@ export const updateStory = async (req, res) => {
   if (req.body.version !== story.__v) return res.status(409).json({ error: 'This story has changed. Reload the editor before saving again.' })
   const existingById = new Map(story.chapters.map(chapter => [String(chapter._id), chapter]))
   const keptIds = req.body.chapters.filter(chapter => chapter.id).map(chapter => chapter.id)
-  const originalKeptOrder = story.chapters.filter(chapter => keptIds.includes(String(chapter._id))).map(chapter => String(chapter._id))
-  if (new Set(keptIds).size !== keptIds.length || keptIds.some(id => !existingById.has(id)) || keptIds.some((id, index) => id !== originalKeptOrder[index])) return res.status(400).json({ error: 'Existing chapters must keep their IDs and relative order.' })
-  const firstNew = req.body.chapters.findIndex(chapter => !chapter.id)
-  if (firstNew >= 0 && req.body.chapters.slice(firstNew).some(chapter => chapter.id)) return res.status(400).json({ error: 'New chapters must be added after existing chapters.' })
+  if (new Set(keptIds).size !== keptIds.length || keptIds.some(id => !existingById.has(id))) return res.status(400).json({ error: 'Each existing chapter must keep its original ID and appear only once.' })
   for (const [index, chapter] of req.body.chapters.entries()) {
     for (const image of chapter.images) {
       if (!image.data && !existingById.get(chapter.id)?.images.some(existing => existing.publicId && existing.publicId === image.publicId)) return res.status(400).json({ error: 'An existing image does not belong to this chapter.' })
     }
   }
   if (req.body.thumbnail && !req.body.thumbnail.data && (!story.thumbnail?.publicId || req.body.thumbnail.publicId !== story.thumbnail.publicId)) return res.status(400).json({ error: 'That thumbnail does not belong to this story.' })
-  const hasNewImages = !!req.body.thumbnail?.data || req.body.chapters.some(chapter => chapter.images.some(image => image.data))
+  const hasNewImages = !!req.body.thumbnail?.data || req.body.chapters.some(chapter => chapter.images.some(image => image.data)) || (req.body.characters || []).some(character => character.images.some(image => image.data))
   if (hasNewImages && !['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'].every(key => process.env[key]?.trim())) return res.status(503).json({ error: 'Cloudinary uploads are not configured.' })
   const uploaded = []
   let committed = false
@@ -183,12 +185,17 @@ export const updateStory = async (req, res) => {
       chapters.push({ status: resolveChapterStatus(chapter, existingById.get(chapter.id)), title: chapter.title.trim(), text: chapter.text, images, number: index + 1 })
     }
     const fields = { contentRating: req.body.contentRating === undefined ? (story.contentRating || 'unrated') : req.body.contentRating, plannedChapterCount: req.body.plannedChapterCount === undefined ? story.plannedChapterCount : req.body.plannedChapterCount, title: req.body.title.trim(), authorNote: req.body.authorNote || null, storytellerNote: '', description: (chapters.find(isPublishedChapter)?.text || '').slice(0, 180), thumbnail }
+    if (req.body.characters !== undefined) fields.characters = await prepareCharacterSheets(req.body.characters, story.characters || [], story.slug, uploaded)
     const candidate = new Story({ ...story.toObject(), ...fields, chapters: chapters.map((chapter, index) => ({ ...(existingById.get(req.body.chapters[index].id)?.toObject() || {}), ...chapter })) })
     await candidate.validate()
     // Merge editor fields into the current database chapters, preserving comments posted while editing.
     const pipeline = [{ $set: {
       ...Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, { $literal: value }])),
       __v: { $add: ['$__v', 1] },
+      ...(req.body.characters === undefined ? {} : { archivedCharacters: { $concatArrays: [
+        { $ifNull: ['$archivedCharacters', []] },
+        { $map: { input: { $filter: { input: { $ifNull: ['$characters', []] }, as: 'oldCharacter', cond: { $not: [{ $in: ['$$oldCharacter._id', { $literal: fields.characters.map(character => character._id) }] }] } } }, as: 'removedCharacter', in: { $mergeObjects: ['$$removedCharacter', { deletedAt: { $literal: new Date() } }] } } },
+      ] } }),
       archivedChapters: { $concatArrays: [
         { $ifNull: ['$archivedChapters', []] },
         { $map: { input: { $filter: { input: '$chapters', as: 'old', cond: { $not: [{ $in: ['$$old._id', { $literal: candidate.chapters.map(chapter => chapter._id) }] }] } } }, as: 'removed', in: { $mergeObjects: ['$$removed', { deletedAt: { $literal: new Date() } }] } } },
@@ -210,13 +217,13 @@ export const updateStory = async (req, res) => {
       if (updated && hasAddedChapters) await notifyNewChapters(previouslyPublishedIds, updated, req.user, session)
     })
     if (!updated) {
-      await Promise.allSettled(uploaded.map(id => cloudinary.uploader.destroy(id)))
+      await cleanupStoryUploads(uploaded)
       return res.status(409).json({ error: 'The story changed while saving. Reload the editor and try again.' })
     }
     committed = true
     return res.json(readerStory(updated, req.user))
   } catch {
-    if (!committed) await Promise.allSettled(uploaded.map(id => cloudinary.uploader.destroy(id)))
+    if (!committed) await cleanupStoryUploads(uploaded)
     return res.status(500).json({ error: 'Unable to save changes. Your editor has been kept; please try again.' })
   }
 }

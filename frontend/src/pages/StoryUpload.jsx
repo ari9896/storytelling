@@ -1,9 +1,14 @@
+import DeleteActionMenu from '../components/DeleteActionMenu.jsx'
+import CharacterTray from '../components/CharacterTray.jsx'
+import { loadCharacterSheets, newCharacterSheet, serializeCharacterSheets } from '../lib/editorCharacters.js'
+import ChapterOrderList from '../components/ChapterOrderList.jsx'
+import { hasDraftBeforePublished, moveChapter } from '../lib/chapterOrder.js'
 import { useImageCrop } from '../lib/useImageCrop.jsx'
 import { countWords } from '../lib/wordCount.js'
 import ImageBackdrop from '../components/ImageBackdrop.jsx'
 import { api, authError } from '../lib/api.js'
-import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiImage, FiPlus, FiTrash2, FiChevronDown, FiSave } from 'react-icons/fi'
 import { useAuth } from '../context/auth.js'
 
@@ -11,6 +16,7 @@ const newChapter = () => ({ id: crypto.randomUUID(), status: 'draft', title: '',
 
 const StoryUpload = ({ mode = 'create' }) => {
   const { storyId } = useParams()
+  const location = useLocation()
   const { prepareImage, cropDialog } = useImageCrop()
   const editing = mode === 'edit'
   const [loadedId, setLoadedId] = useState(null)
@@ -36,9 +42,25 @@ const StoryUpload = ({ mode = 'create' }) => {
     return () => clearTimeout(timeout)
   }, [savedToast])
   const [chapters, setChapters] = useState(() => [newChapter()])
+  const [characters, setCharacters] = useState([])
+  const [characterIndex, setCharacterIndex] = useState(null)
+  const [characterImageIndex, setCharacterImageIndex] = useState(0)
   const [chapterIndex, setChapterIndex] = useState(0)
   const [imageIndex, setImageIndex] = useState(0)
   const [error, setError] = useState('')
+  const editorRef = useRef(null)
+  const characterTrayRef = useRef(null)
+  const pendingEditorScroll = useRef(false)
+  useLayoutEffect(() => {
+    const editor = editorRef.current
+    if (!pendingEditorScroll.current || !editor) return
+    pendingEditorScroll.current = false
+    const headerHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--site-header-height')) || 0
+    const trayHeight = window.matchMedia('(min-width: 1280px)').matches ? 0 : (characterTrayRef.current?.getBoundingClientRect().height || 0) + 8
+    const top = window.scrollY + editor.getBoundingClientRect().top - headerHeight - trayHeight - 16
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    window.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? 'instant' : 'smooth' })
+  }, [characterIndex, characters.length, thumbnailView, loading, loadedId])
   const saveNoteRef = useRef(null)
   const saveActionRef = useRef(null)
   useEffect(() => {
@@ -81,13 +103,16 @@ const StoryUpload = ({ mode = 'create' }) => {
       setAuthorNote(data.authorNote)
       setVersion(data.version)
       setChapters(data.chapters.map(chapter => ({ ...chapter, status: chapter.status || 'published', chapterId: chapter.id, images: chapter.images.map((image, index) => ({ ...image, id: `${chapter.id}-${index}` })) })))
+      setCharacters(loadCharacterSheets(data.characters))
+      const restoredCharacter = location.state?.characterIndex
+      setCharacterIndex(Number.isInteger(restoredCharacter) && restoredCharacter >= 0 && restoredCharacter < (data.characters?.length || 0) ? restoredCharacter : null)
       setChapterIndex(0)
       setImageIndex(0)
       setLoadedId(storyId)
       setLoadError('')
     }).catch(failure => { if (active) setLoadError(authError(failure)) })
     return () => { active = false }
-  }, [editing, storyId, accountId, loading])
+  }, [editing, storyId, accountId, loading, location.state?.characterIndex])
   if (loading) return <main className="mx-auto max-w-5xl py-16" role="status">Checking your account…</main>
   if (!user) return <Navigate to="/login" state={{ returnTo: editing ? `/stories/${storyId}/edit` : '/admin/story-upload' }} replace />
   if (!editing && !['writer', 'admin'].includes(user.role)) return <Navigate to="/" replace />
@@ -96,10 +121,35 @@ const StoryUpload = ({ mode = 'create' }) => {
   if (editing && loadedId !== storyId) return <main className="mx-auto max-w-5xl py-16" role="status">Loading story editor…</main>
 
   const chapter = chapters[chapterIndex]
-  const image = chapter.images[imageIndex]
-  const chapterWordCount = countWords(chapter.text)
+  const character = characterIndex === null ? null : characters[characterIndex]
+  const currentItem = character || chapter
+  const currentImageIndex = character ? characterImageIndex : imageIndex
+  const setCurrentImageIndex = character ? setCharacterImageIndex : setImageIndex
+  const image = currentItem.images[currentImageIndex]
+  const itemLabel = character ? character.name.trim() || 'Character' : `Chapter ${chapterIndex + 1}`
+  const chapterWordCount = countWords(character ? character.notes : chapter.text)
   const publishedCount = chapters.filter(item => item.status !== 'draft').length
   const updateChapter = (values) => setChapters(current => current.map((item, index) => index === chapterIndex ? { ...item, ...values } : item))
+  const updateCharacter = values => setCharacters(current => current.map((item, index) => index === characterIndex ? { ...item, ...values } : item))
+  const updateCurrent = character ? updateCharacter : updateChapter
+  const selectCharacter = index => { pendingEditorScroll.current = true; setCharacterIndex(current => current === index ? null : index); setCharacterImageIndex(0); setThumbnailView(false); setError('') }
+  const addCharacter = () => { pendingEditorScroll.current = true; setCharacters(current => [...current, newCharacterSheet()]); setCharacterIndex(characters.length); setCharacterImageIndex(0); setThumbnailView(false); setError('') }
+  const deleteCharacter = () => {
+    if (!window.confirm('Remove this character sheet? It will be archived when you save.')) return
+    for (const picture of character.images) if (picture.file) { URL.revokeObjectURL(picture.url); urls.current.delete(picture.url) }
+    setCharacters(current => current.filter((_item, index) => index !== characterIndex))
+    setCharacterIndex(characters.length > 1 ? Math.min(characterIndex, characters.length - 2) : null)
+    setCharacterImageIndex(0); setError('')
+  }
+  const reorderChapter = (sourceId, targetId) => {
+    if (saving || syncFailed) return
+    const selectedId = chapter.id
+    const reordered = moveChapter(chapters, sourceId, targetId)
+    if (reordered === chapters) return
+    setChapters(reordered)
+    setChapterIndex(reordered.findIndex(item => item.id === selectedId))
+    setError(hasDraftBeforePublished(reordered) ? 'This order puts a draft before a published chapter. Publish it or move drafts after published chapters before saving.' : '')
+  }
   const changeChapterStatus = status => {
     if (status === 'published' && chapters.slice(0, chapterIndex).some(item => item.status === 'draft')) { setError('Publish earlier chapters first so readers can follow the story in order.'); return }
     if (status === 'draft' && chapters.slice(chapterIndex + 1).some(item => item.status !== 'draft')) { setError('Set later chapters to Draft first before making this chapter private.'); return }
@@ -118,20 +168,20 @@ const StoryUpload = ({ mode = 'create' }) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
-    if (chapter.images.length + files.length > 5) { setError('Each chapter can have up to five pictures.'); return }
+    if (currentItem.images.length + files.length > 5) { setError('Each chapter or character can have up to five pictures.'); return }
     if (files.some(file => !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type))) { setError('Choose PNG, JPEG, WebP, or GIF pictures.'); return }
     if (files.some(file => file.size > 5 * 1024 * 1024)) { setError('Each picture must be 5 MB or smaller.'); return }
     const images = []
     for (const [index, original] of files.entries()) {
-      const file = await prepareImage(original, { title: `Adjust chapter picture ${index + 1} of ${files.length}` })
+      const file = await prepareImage(original, { title: `Adjust ${character ? 'character' : 'chapter'} picture ${index + 1} of ${files.length}` })
       if (!file) break
       const url = URL.createObjectURL(file)
       urls.current.add(url)
       images.push({ id: crypto.randomUUID(), file, url })
     }
     if (!images.length) return
-    updateChapter({ images: [...chapter.images, ...images] })
-    setImageIndex(chapter.images.length)
+    updateCurrent({ images: [...currentItem.images, ...images] })
+    setCurrentImageIndex(currentItem.images.length)
     setError('')
   }
   const chooseThumbnail = async event => {
@@ -154,8 +204,8 @@ const StoryUpload = ({ mode = 'create' }) => {
   const removeImage = () => {
     URL.revokeObjectURL(image.url)
     urls.current.delete(image.url)
-    updateChapter({ images: chapter.images.filter(item => item.id !== image.id) })
-    setImageIndex(index => Math.max(0, index - 1))
+    updateCurrent({ images: currentItem.images.filter(item => item.id !== image.id) })
+    setCurrentImageIndex(index => Math.max(0, index - 1))
     setError('')
   }
 
@@ -163,13 +213,14 @@ const StoryUpload = ({ mode = 'create' }) => {
     if (saving || syncFailed) return
     if (plannedChapterCount !== '' && (!Number.isInteger(Number(plannedChapterCount)) || Number(plannedChapterCount) < chapters.length || Number(plannedChapterCount) > 10000)) { setError('Planned chapters must be a whole number at least as large as your available chapters (up to 10,000).'); return }
     if (!title.trim()) { setError('Enter a story title before saving.'); return }
+    if (hasDraftBeforePublished(chapters)) { setError('Published chapters must come before drafts. Adjust the order or chapter visibility before saving.'); return }
     if (chapters.some(item => item.status !== 'draft' && (!item.title.trim() || !item.text.trim()))) { setError('Published chapters need a title and text. Leave unfinished chapters as Draft.'); return }
     if (authorNote && (!authorNote.title.trim() || !authorNote.text.trim())) { setError('Complete the author note or remove it before saving.'); return }
-    if (chapters.flatMap(item => item.images).reduce((size, item) => size + (item.file?.size || 0), 0) + (thumbnail?.file?.size || 0) > 25 * 1024 * 1024) { setError('Story pictures must total 25 MB or less per save.'); return }
+    if ([...chapters, ...characters].flatMap(item => item.images).reduce((size, item) => size + (item.file?.size || 0), 0) + (thumbnail?.file?.size || 0) > 25 * 1024 * 1024) { setError('Story pictures must total 25 MB or less per save.'); return }
     setSaving(true)
     setError('')
     try {
-      const payload = { contentRating, plannedChapterCount: plannedChapterCount === '' ? null : Number(plannedChapterCount), title, authorNote, version, chapters: [], thumbnail: null }
+      const payload = { characters: await serializeCharacterSheets(characters, file => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Unable to read a character picture.')); reader.readAsDataURL(file) })), contentRating, plannedChapterCount: plannedChapterCount === '' ? null : Number(plannedChapterCount), title, authorNote, version, chapters: [], thumbnail: null }
       if (thumbnail?.file) {
         const data = await new Promise((resolve, reject) => {
           const reader = new FileReader()
@@ -203,6 +254,7 @@ const StoryUpload = ({ mode = 'create' }) => {
         try {
           const { data: saved } = await api.get(`/stories/${encodeURIComponent(storyId)}/edit`)
           setVersion(saved.version)
+          setCharacters(loadCharacterSheets(saved.characters))
           setContentRating(saved.contentRating || 'unrated')
           setThumbnail(saved.thumbnail)
           setChapters(saved.chapters.map(chapter => ({ ...chapter, status: chapter.status || 'published', chapterId: chapter.id, images: chapter.images.map((image, index) => ({ ...image, id: `${chapter.id}-${index}` })) })))
@@ -210,7 +262,8 @@ const StoryUpload = ({ mode = 'create' }) => {
           setSyncFailed(true)
           setError('Changes were saved, but the editor could not refresh. Reload this page before making more changes.')
         }
-      } else navigate(data.availableChapterCount > 0 ? `/stories/${data.id}` : `/stories/${data.id}/edit`)
+      } else if (characters.length) navigate(`/stories/${data.id}/edit`, { state: { characterIndex } })
+      else navigate(data.availableChapterCount > 0 ? `/stories/${data.id}` : `/stories/${data.id}/edit`)
     } catch (failure) {
       setError(authError(failure))
     } finally {
@@ -243,12 +296,13 @@ const StoryUpload = ({ mode = 'create' }) => {
       <input id="planned-chapters" type="number" min={chapters.length} max={10000} step={1} value={plannedChapterCount} onChange={event => setPlannedChapterCount(event.target.value)} placeholder="For example, 30 or 100" aria-describedby="planned-chapters-help" className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-blue-500 dark:border-blue-900 dark:bg-slate-900 dark:text-slate-100" />
       <p id="planned-chapters-help" className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{publishedCount} published chapters · {chapters.length - publishedCount} drafts. Set the intended total to show “Chapter 1 of 30” while letting readers know more chapters are coming. Leave blank if the total is undecided.</p>
     </div>
-    {authorNote && <section aria-labelledby="author-note-heading" className="mb-6 rounded-3xl border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 p-8 shadow-lg shadow-blue-900/5">
+    {authorNote && !character && <section aria-labelledby="author-note-heading" className="mb-6 rounded-3xl border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 p-8 shadow-lg shadow-blue-900/5">
       <div className="flex items-center justify-between gap-4"><h2 id="author-note-heading" className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300">Author’s note · Before chapter 1</h2><button type="button" onClick={() => setAuthorNote(null)} aria-label="Remove author note" className="rounded-full p-2 text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-800"><FiTrash2 /></button></div>
       <label className="mt-5 block text-sm font-semibold">Note title<input value={authorNote.title} maxLength={200} onChange={event => setAuthorNote(current => ({ ...current, title: event.target.value }))} className="mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-xl font-bold focus:outline-blue-500" /></label>
       <label className="mt-5 block text-sm font-semibold">Author’s note<textarea value={authorNote.text} maxLength={100000} onChange={event => setAuthorNote(current => ({ ...current, text: event.target.value }))} rows={5} placeholder="Introduce your story to the reader…" className="mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-base font-normal leading-8 focus:outline-blue-500" /></label>
     </section>}
-    {thumbnailView ? <section aria-label="Story thumbnail editor" className="overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-lg shadow-blue-900/10 sm:p-8">
+    <CharacterTray trayRef={characterTrayRef} characters={characters} selectedIndex={characterIndex} onSelect={selectCharacter} onAdd={addCharacter} disabled={saving || syncFailed} />
+    {thumbnailView && !character ? <section aria-label="Story thumbnail editor" className="overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-lg shadow-blue-900/10 sm:p-8">
       <p className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300">Story thumbnail</p>
       <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">This image appears in the home menu, separately from your chapter pictures.</p>
       <input ref={thumbnailInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={chooseThumbnail} aria-label="Choose story thumbnail" className="sr-only" />
@@ -257,30 +311,30 @@ const StoryUpload = ({ mode = 'create' }) => {
       </button>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-slate-500 dark:text-slate-400">One image · PNG, JPEG, WebP, or GIF · Up to 5 MB</p>{thumbnail && <button type="button" onClick={removeThumbnail} className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950"><FiTrash2 /> Remove thumbnail</button>}</div>
     </section> : <>
-    <section aria-label={`Chapter ${chapterIndex + 1} editor`} className="grid overflow-hidden rounded-3xl bg-white dark:bg-slate-900 shadow-lg shadow-blue-900/10 md:min-h-[36rem] md:grid-cols-2">
+    <section ref={editorRef} aria-label={character ? `${itemLabel} character sheet` : `Chapter ${chapterIndex + 1} editor`} className="grid overflow-hidden rounded-3xl bg-white dark:bg-slate-900 shadow-lg shadow-blue-900/10 md:min-h-[36rem] md:grid-cols-2">
       <div className="flex min-w-0 flex-col bg-gradient-to-br from-indigo-950 via-blue-900 to-sky-800 p-5 text-white sm:p-7">
-        <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={addImages} className="sr-only" aria-label="Add chapter pictures" />
+        <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={addImages} className="sr-only" aria-label={character ? 'Add character pictures' : 'Add chapter pictures'} />
         {image ? <div className="relative isolate flex min-h-72 flex-1 items-center justify-center overflow-hidden rounded-2xl bg-slate-950/30 md:min-h-80">
           <ImageBackdrop src={image.url} />
-          <img src={image.url} alt={`Chapter ${chapterIndex + 1}, picture ${imageIndex + 1}`} className="relative max-h-[28rem] w-full object-contain" />
-          {chapter.images.length > 1 && <>
-            <button type="button" onClick={() => setImageIndex(index => (index - 1 + chapter.images.length) % chapter.images.length)} aria-label="Previous picture" className="absolute left-3 rounded-full bg-white dark:bg-slate-900 p-3 text-blue-900 dark:text-blue-100 shadow-lg hover:bg-blue-50 dark:hover:bg-slate-800"><FiChevronLeft /></button>
-            <button type="button" onClick={() => setImageIndex(index => (index + 1) % chapter.images.length)} aria-label="Next picture" className="absolute right-3 rounded-full bg-white dark:bg-slate-900 p-3 text-blue-900 dark:text-blue-100 shadow-lg hover:bg-blue-50 dark:hover:bg-slate-800"><FiChevronRight /></button>
+          <img src={image.url} alt={`${itemLabel}, picture ${currentImageIndex + 1}`} className="relative max-h-[28rem] w-full object-contain" />
+          {currentItem.images.length > 1 && <>
+            <button type="button" onClick={() => setCurrentImageIndex(index => (index - 1 + currentItem.images.length) % currentItem.images.length)} aria-label="Previous picture" className="absolute left-3 rounded-full bg-white dark:bg-slate-900 p-3 text-blue-900 dark:text-blue-100 shadow-lg hover:bg-blue-50 dark:hover:bg-slate-800"><FiChevronLeft /></button>
+            <button type="button" onClick={() => setCurrentImageIndex(index => (index + 1) % currentItem.images.length)} aria-label="Next picture" className="absolute right-3 rounded-full bg-white dark:bg-slate-900 p-3 text-blue-900 dark:text-blue-100 shadow-lg hover:bg-blue-50 dark:hover:bg-slate-800"><FiChevronRight /></button>
           </>}
         </div> : <button type="button" onClick={() => inputRef.current?.click()} className="flex min-h-80 flex-1 flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-white/40 px-6 py-12 transition hover:border-white dark:hover:border-slate-700 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
           <FiImage aria-hidden="true" className="text-5xl text-blue-200" />
-          <span className="text-lg font-semibold">Add chapter pictures</span>
-          <span className="max-w-56 text-center text-sm leading-relaxed text-blue-100">Click to choose up to five images for this chapter.</span>
+          <span className="text-lg font-semibold">{character ? 'Add character pictures' : 'Add chapter pictures'}</span>
+          <span className="max-w-56 text-center text-sm leading-relaxed text-blue-100">Click to choose up to five images for this {character ? 'character' : 'chapter'}.</span>
         </button>}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p aria-live="polite" className="text-sm text-blue-100">{chapter.images.length ? `Picture ${imageIndex + 1} of ${chapter.images.length}` : '0 of 5 pictures'}</p>
+          <p aria-live="polite" className="text-sm text-blue-100">{currentItem.images.length ? `Picture ${currentImageIndex + 1} of ${currentItem.images.length}` : '0 of 5 pictures'}</p>
           <div className="flex items-center gap-2">
             {image && <button type="button" onClick={removeImage} aria-label="Remove current picture" className="rounded-full p-2 hover:bg-white/15"><FiTrash2 /></button>}
-            {image && <button type="button" disabled={chapter.images.length >= 5} onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-2 rounded-full bg-white dark:bg-slate-900 px-4 py-2 text-sm font-semibold text-blue-900 dark:text-blue-100 hover:bg-blue-50 dark:hover:bg-slate-800 disabled:opacity-50"><FiPlus aria-hidden="true" /> Add pictures</button>}
+            {image && <button type="button" disabled={currentItem.images.length >= 5} onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-2 rounded-full bg-white dark:bg-slate-900 px-4 py-2 text-sm font-semibold text-blue-900 dark:text-blue-100 hover:bg-blue-50 dark:hover:bg-slate-800 disabled:opacity-50"><FiPlus aria-hidden="true" /> Add pictures</button>}
           </div>
         </div>
-        {image && <label className="mt-5 block text-sm font-semibold text-white">Explanation for picture {imageIndex + 1} (optional)
-          <textarea value={image.explanation || ''} maxLength={2000} rows={3} onChange={event => updateChapter({ images: chapter.images.map(picture => picture.id === image.id ? { ...picture, explanation: event.target.value } : picture) })} placeholder="Why did you choose this picture?" className="mt-2 w-full rounded-xl border border-white/30 bg-slate-950/40 p-3 text-sm font-normal leading-relaxed text-white placeholder:text-blue-200 focus:outline-2 focus:outline-white" />
+        {image && <label className="mt-5 block text-sm font-semibold text-white">Explanation for picture {currentImageIndex + 1} (optional)
+          <textarea value={image.explanation || ''} maxLength={2000} rows={3} onChange={event => updateCurrent({ images: currentItem.images.map(picture => picture.id === image.id ? { ...picture, explanation: event.target.value } : picture) })} placeholder="Why did you choose this picture?" className="mt-2 w-full rounded-xl border border-white/30 bg-slate-950/40 p-3 text-sm font-normal leading-relaxed text-white placeholder:text-blue-200 focus:outline-2 focus:outline-white" />
           <span className="mt-1 block text-xs font-normal text-blue-200">Each picture has its own explanation, separate from the chapter text.</span>
         </label>}
         <p className="mt-3 text-xs text-blue-200">PNG, JPEG, WebP, or GIF · Up to 5 MB each</p>
@@ -292,51 +346,45 @@ const StoryUpload = ({ mode = 'create' }) => {
       </div>
       <div className="flex min-w-0 flex-col p-8 md:p-10">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Chapter {chapterIndex + 1}</p>
-          <button type="button" onClick={deleteChapter} disabled={chapters.length <= 1} title={chapters.length <= 1 ? 'Keep at least one chapter' : 'Delete this chapter'} className="inline-flex items-center gap-2 rounded-full border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"><FiTrash2 aria-hidden="true" />Delete chapter</button>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{character ? 'Character · Private' : `Chapter ${chapterIndex + 1}`}</p>
+          <DeleteActionMenu key={character ? character.id : chapter.id} label={character ? 'Character options' : 'Chapter options'} actionLabel={character ? 'Delete character' : 'Delete chapter'} onDelete={character ? deleteCharacter : deleteChapter} disabled={saving || syncFailed} actionDisabled={!character && chapters.length <= 1} disabledReason="Keep at least one chapter in the story." />
         </div>
-        <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-slate-800">
+        {!character && <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-slate-800">
           <label htmlFor="chapter-publication-status" className="block text-sm font-semibold text-slate-700 dark:text-slate-200">Chapter visibility</label>
           <select id="chapter-publication-status" value={chapter.status || 'published'} onChange={event => changeChapterStatus(event.target.value)} aria-describedby="chapter-publication-help" className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900">
             <option value="draft">Draft — private</option><option value="published">Published — visible to readers</option>
           </select>
           <p id="chapter-publication-help" className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{chapter.status === 'draft' ? 'Only you can open this chapter in the editor. Save rough notes or leave fields blank. Choose Published and save when it is ready.' : 'This chapter is available to readers after you save. Choose Draft to make it private.'}</p>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Visibility changes take effect when you save. Publish chapters in order.</p>
-        </div>
-        <label htmlFor="upload-chapter-title" className="mt-8 text-sm font-semibold text-slate-600 dark:text-slate-300">Chapter title</label>
-        <input id="upload-chapter-title" value={chapter.title} onChange={event => updateChapter({ title: event.target.value })} placeholder="Name this chapter" className="mt-2 w-full border-b border-slate-200 dark:border-slate-700 py-3 text-2xl font-bold outline-none placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:border-blue-500" />
+        </div>}
+        <label htmlFor="upload-chapter-title" className="mt-8 text-sm font-semibold text-slate-600 dark:text-slate-300">{character ? 'Character name' : 'Chapter title'}</label>
+        <input id="upload-chapter-title" value={character ? character.name : chapter.title} maxLength={200} onChange={event => updateCurrent(character ? { name: event.target.value } : { title: event.target.value })} placeholder={character ? 'Character name' : 'Name this chapter'} className="mt-2 w-full border-b border-slate-200 dark:border-slate-700 py-3 text-2xl font-bold outline-none placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:border-blue-500" />
         <div className="mt-7 flex items-center justify-between gap-3">
-          <label htmlFor="upload-chapter-text" className="text-sm font-semibold text-slate-600 dark:text-slate-300">Chapter text</label>
+          <label htmlFor="upload-chapter-text" className="text-sm font-semibold text-slate-600 dark:text-slate-300">{character ? 'Character notes' : 'Chapter text'}</label>
           <span id="chapter-word-count" className="text-sm tabular-nums text-slate-500 dark:text-slate-400">{chapterWordCount.toLocaleString()} {chapterWordCount === 1 ? 'word' : 'words'}</span>
         </div>
-        <textarea id="upload-chapter-text" aria-describedby="chapter-word-count" value={chapter.text} onChange={event => updateChapter({ text: event.target.value })} placeholder="Your story starts here…" rows={10} className="mt-3 min-h-64 w-full flex-1 resize-y rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-lg leading-8 outline-none placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+        <textarea id="upload-chapter-text" aria-describedby="chapter-word-count" value={character ? character.notes : chapter.text} maxLength={100000} onChange={event => updateCurrent(character ? { notes: event.target.value } : { text: event.target.value })} placeholder={character ? 'Keep track of personality, relationships, planned scenes, and events involving this character…' : 'Your story starts here…'} rows={10} className="mt-3 min-h-64 w-full flex-1 resize-y rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-lg leading-8 outline-none placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
       </div>
     </section>
     </>}
-    <nav aria-label="Editor navigation" className="mt-5 flex items-center justify-between rounded-2xl bg-white/85 dark:bg-slate-900/90 p-4">
+    {character ? <nav aria-label="Character navigation" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/85 p-4 dark:bg-slate-900/90">
+      <button type="button" disabled={characterIndex === 0} onClick={() => selectCharacter(characterIndex - 1)} className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-blue-700 disabled:opacity-40 dark:text-blue-300"><FiChevronLeft />Previous character</button>
+      <button type="button" onClick={() => selectCharacter(characterIndex)} className="text-center text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">Character {characterIndex + 1} of {characters.length}<span className="block text-xs font-normal">Return to chapter</span></button>
+      <button type="button" disabled={characterIndex === characters.length - 1} onClick={() => selectCharacter(characterIndex + 1)} className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-blue-700 disabled:opacity-40 dark:text-blue-300">Next character<FiChevronRight /></button>
+    </nav> : <nav aria-label="Editor navigation" className="mt-5 flex items-center justify-between rounded-2xl bg-white/85 dark:bg-slate-900/90 p-4">
       {!thumbnailView ? <button type="button" onClick={() => chapterIndex === 0 ? setThumbnailView(true) : selectChapter(chapterIndex - 1)} className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800"><FiChevronLeft />{chapterIndex === 0 ? 'Thumbnail' : 'Previous'}</button> : <span className="px-4 text-sm font-semibold text-blue-700 dark:text-blue-300">Thumbnail</span>}
       <button type="button" disabled={!thumbnailView && chapterIndex === chapters.length - 1} onClick={() => thumbnailView ? selectChapter(0) : selectChapter(chapterIndex + 1)} className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-400">{thumbnailView ? 'Chapter 1' : 'Next'}<FiChevronRight /></button>
-    </nav>
-    <nav aria-label="Draft chapters" className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl bg-white/85 dark:bg-slate-900/90 p-4 shadow-sm">
+    </nav>}
+    {!character && <nav aria-label="Draft chapters" className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl bg-white/85 dark:bg-slate-900/90 p-4 shadow-sm">
       <button type="button" onClick={() => setThumbnailView(true)} aria-current={thumbnailView ? 'step' : undefined} className="inline-flex items-center gap-3 rounded-2xl border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 px-4 py-3 text-sm font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800">{thumbnail ? <img src={thumbnail.url} alt="" className="h-10 w-16 rounded-md object-cover" /> : <FiImage aria-hidden="true" />}Thumbnail</button>
-      <div className="grid w-full gap-3 sm:grid-cols-2">
-        {chapters.map((item, index) => <button key={item.id} type="button" onClick={() => selectChapter(index)} aria-current={!thumbnailView && chapterIndex === index ? 'step' : undefined} className={`flex min-h-24 min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-4 text-left transition focus-visible:outline-2 focus-visible:outline-blue-700 ${!thumbnailView && chapterIndex === index ? 'border-blue-400 bg-blue-50 dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-blue-300 dark:hover:border-blue-800 hover:bg-blue-50 dark:hover:bg-slate-800'}`}>
-          <span className="min-w-0 flex-1">
-            <span className="block text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">Chapter {index + 1} · {item.status === 'draft' ? 'Draft' : 'Published'}</span>
-            <span className="mt-1 block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title.trim() || 'Untitled chapter'}</span>
-          </span>
-          <span className="flex shrink-0 gap-1.5" aria-label={`${item.images.length} of 5 pictures`}>
-            {item.images.length ? item.images.slice(0, 5).map((picture, pictureIndex) => <img key={picture.id} src={picture.url} alt={`Chapter ${index + 1}, picture ${pictureIndex + 1}`} className="h-8 w-8 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 object-cover" />) : <span aria-hidden="true" className="h-8 w-8 rounded-md border-2 border-dotted border-slate-400 dark:border-slate-500 bg-slate-50 dark:bg-slate-800" />}
-          </span>
-        </button>)}
-      </div>
+      <ChapterOrderList chapters={chapters} selectedId={thumbnailView ? null : chapter.id} onSelect={selectChapter} onReorder={reorderChapter} disabled={saving || syncFailed} />
       <div className="group relative ml-auto flex items-center gap-1 pb-2 -mb-2">
         <button type="button" disabled={chapters.length >= 50} onClick={() => { setChapters(current => [...current, newChapter()]); selectChapter(chapters.length) }} className="inline-flex items-center gap-2 rounded-full border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800 disabled:opacity-50"><FiPlus aria-hidden="true" /> Add chapter</button>
         <button type="button" aria-label="More chapter options" aria-expanded={noteMenu} onClick={() => setNoteMenu(current => !current)} className="rounded-full p-2 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800"><FiChevronDown /></button>
         {!authorNote && <div className={`absolute right-0 top-full z-20 w-52 pt-2 transition-opacity delay-300 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 ${noteMenu ? 'visible opacity-100' : 'invisible opacity-0'}`}><button type="button" onClick={() => { setAuthorNote({ title: 'A note from the author', text: '' }); setNoteMenu(false); requestAnimationFrame(() => document.getElementById('author-note-heading')?.scrollIntoView({ behavior: 'smooth', block: 'center' })) }} className="w-full rounded-xl border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 px-4 py-3 text-left text-sm font-semibold text-blue-700 dark:text-blue-300 shadow-lg hover:bg-blue-50 dark:hover:bg-slate-800">Add author’s note</button></div>}
       </div>
-    </nav>
-    <p ref={saveNoteRef} className="mt-8 flex min-h-12 w-full max-w-lg sm:w-[calc(100%_-_24rem)] items-center text-sm text-slate-500 dark:text-slate-400">{editing ? 'Save keeps draft chapters private and updates published chapters while preserving comments and progress.' : 'Save stores your work. Only chapters marked Published appear to readers.'} Unsaved changes are lost if you leave or refresh.</p>
+    </nav>}
+    <p ref={saveNoteRef} className="mt-8 flex min-h-12 w-full max-w-lg sm:w-[calc(100%_-_24rem)] items-center text-sm text-slate-500 dark:text-slate-400">{editing ? 'Save stores your private character sheets and draft chapters, and updates published chapters.' : 'Save stores your work. Character sheets stay private; only Published chapters appear to readers.'} Unsaved changes are lost if you leave or refresh.</p>
     <div ref={saveActionRef} className="pointer-events-none sticky bottom-6 z-20 -mt-12 flex min-h-12 flex-wrap justify-end gap-3 sm:bottom-8">
       {editing && <button type="button" disabled={saving} onClick={() => navigate(publishedCount > 0 ? `/stories/${storyId}` : '/')} className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-lg hover:bg-blue-50 dark:border-blue-900 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-slate-800 disabled:opacity-60"><FiArrowLeft aria-hidden="true" />Exit edit view</button>}
       <button type="button" onClick={saveStory} className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-blue-700 px-6 py-3 font-bold text-white shadow-lg hover:bg-blue-800 disabled:opacity-60"><FiSave aria-hidden="true" />{saving ? 'Saving story…' : editing ? 'Save changes' : 'Save story'}</button>

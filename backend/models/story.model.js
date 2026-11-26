@@ -1,3 +1,4 @@
+import characterSchema from './character.model.js'
 import mongoose from 'mongoose'
 
 export const STORY_RATINGS = ['unrated', 'everyone', 'teen', 'mature']
@@ -49,6 +50,8 @@ const storySchema = new mongoose.Schema({
     default: null,
   },
   storytellerNote: { type: String, default: '' },
+  characters: { type: [characterSchema], default: [], select: false, validate: { validator: characters => characters.length <= 100, message: 'A story can have up to 100 characters.' } },
+  archivedCharacters: { type: [characterSchema], default: [], select: false },
   archivedChapters: { type: [chapterSchema], default: [] },
   chapters: {
     type: [chapterSchema],
